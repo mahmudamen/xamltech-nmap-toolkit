@@ -1,0 +1,15 @@
+# Generated scan results
+results/
+network-audit/
+artifacts/
+
+# Editor / OS
+.vscode/
+.idea/
+*.swp
+*.swo
+.DS_Store
+
+# Temporary files
+*.tmp
+*.log
