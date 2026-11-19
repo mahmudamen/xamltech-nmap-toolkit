@@ -26,8 +26,7 @@ Please include:
 Run:
 
 ```bash
-shellcheck nmap-toolkit.sh
-bash tests/test_shellcheck.sh
+make lint
 ```
 
 For functional tests, use an authorized local lab or test network.

@@ -7,6 +7,8 @@ RUN_DIR=""
 START_EPOCH=0
 RUN_XMLS=()
 STAGE_FILES=()
+STAGE_SKIPPED=()
+PREV_REPORT=""
 NMAP_PID=""
 
 # py_report SUBCOMMAND ARGS...  (adds --color to terminal-facing views when enabled)
@@ -21,23 +23,28 @@ have_py()   { command_exists python3 && [[ -f "$LIB_DIR/report.py" ]]; }
 # ---------- run directory & metadata ----------
 
 prepare_run_dir() {
-    local stamp label base n=0
+    local stamp label base n=0 tmp_link
+    [[ -L "$OUTPUT_DIR" ]] && die "Output directory is a symlink: $OUTPUT_DIR"
     stamp="$(safe_timestamp)"; label="$(target_label)"
     base="$OUTPUT_DIR/${stamp}_${PROFILE}_${label}"
     RUN_DIR="$base"
     if (( DRY_RUN )); then return 0; fi     # dry runs never touch the disk
+    umask 077
     while [[ -e "$RUN_DIR" ]]; do n=$(( n + 1 )); RUN_DIR="${base}-$n"; done
     mkdir -p "$RUN_DIR"
     RUN_DIR="$(cd "$RUN_DIR" && pwd)"
     log_init
-    ln -sfn "$(basename "$RUN_DIR")" "$OUTPUT_DIR/latest" 2>/dev/null || true
+    tmp_link="$(mktemp -u "$OUTPUT_DIR/.latest.XXXXXX")"
+    ln -s "$(basename "$RUN_DIR")" "$tmp_link" 2>/dev/null || true
+    mv -Tf "$tmp_link" "$OUTPUT_DIR/latest" 2>/dev/null || ln -sfn "$(basename "$RUN_DIR")" "$OUTPUT_DIR/latest" 2>/dev/null || true
 }
 
 json_escape() { printf '%s' "$1" | tr '\n\r\t' '   ' | sed -e 's/\\/\\\\/g' -e 's/"/\\"/g'; }
 
 write_metadata() {
-    local cmd_line="$1"
+    local cmd_line="$1" skipped_json="" s
     (( DRY_RUN )) && return 0
+    for s in "${STAGE_SKIPPED[@]}"; do skipped_json+="${skipped_json:+,}\"$s\""; done
     cat > "$RUN_DIR/metadata.txt" <<EOF
 XamlTech Nmap Toolkit
 =====================
@@ -62,7 +69,8 @@ EOF
   "privileged": $( ((NMAP_PRIVILEGED)) && echo true || echo false ),
   "operator": "$(json_escape "${SUDO_USER:-${USER:-unknown}}")",
   "host": "$(json_escape "$(hostname 2>/dev/null || echo unknown)")",
-  "command": "$(json_escape "$cmd_line")"
+  "command": "$(json_escape "$cmd_line")",
+  "skipped_stages": [$skipped_json]
 }
 EOF
 }
@@ -82,6 +90,115 @@ shell_quote() {
     for a in "$@"; do
         if [[ "$a" =~ ^[A-Za-z0-9_@%+=:,./-]+$ ]]; then printf ' %s' "$a"; else printf ' %q' "$a"; fi
     done
+}
+
+estimate_plan() {
+    local stages=1
+    command_exists python3 || { warn "python3 is required for --estimate."; return 0; }
+    workflow_exists "$PROFILE" && stages=3
+    python3 - "$OUTPUT_DIR" "$stages" "$PROFILE" "${TARGETS[@]}" <<'PY'
+import datetime as dt
+import ipaddress
+import json
+import os
+import sys
+
+root, stages, profile, *targets = sys.argv[1:]
+hosts = 0
+for target in targets:
+    try:
+        hosts += ipaddress.ip_network(target, strict=False).num_addresses
+    except ValueError:
+        hosts += 1
+durations = []
+if os.path.isdir(root):
+    for name in sorted(os.listdir(root), reverse=True):
+        run = os.path.join(root, name)
+        meta_path = os.path.join(run, "metadata.json")
+        report_path = os.path.join(run, "report.json")
+        if not (os.path.isfile(meta_path) and os.path.isfile(report_path)):
+            continue
+        try:
+            with open(meta_path, encoding="utf-8") as fh:
+                start = float(json.load(fh)["started_epoch"])
+            with open(report_path, encoding="utf-8") as fh:
+                end = dt.datetime.fromisoformat(
+                    json.load(fh)["generated"].replace("Z", "+00:00")
+                ).timestamp()
+            if end > start:
+                durations.append(end - start)
+        except (KeyError, ValueError, TypeError, OSError):
+            continue
+        if len(durations) >= 5:
+            break
+average = sum(durations) / len(durations) if durations else None
+print(f"Profile         : {profile}")
+print(f"Targets         : {len(targets)} token(s), about {hosts} address(es)")
+print(f"Workflow stages : {stages}")
+if average is None:
+    print("Prior duration  : no comparable run yet")
+else:
+    print(f"Prior duration  : about {average:.0f}s (last {len(durations)} run(s))")
+PY
+}
+
+incremental_require() {
+    [[ -z "$INCREMENTAL_BASELINE" ]] && return 1
+    command_exists python3 || die "python3 is required for --incremental."
+    return 0
+}
+
+incremental_filter_targets() {
+    incremental_require || return 0
+    local tmp
+    tmp="$(mktemp)"
+    printf '%s\n' "${TARGETS[@]}" > "$tmp"
+    mapfile -t TARGETS < <(python3 - "$tmp" "$INCREMENTAL_BASELINE" <<'PY'
+import json, sys
+known = {h.get("address") for h in json.load(open(sys.argv[2], encoding="utf-8")).get("hosts", [])}
+for line in open(sys.argv[1], encoding="utf-8"):
+    target = line.strip()
+    if target and target not in known:
+        print(target)
+PY
+    )
+    rm -f "$tmp"
+}
+
+incremental_filter_hosts_file() {
+    incremental_require || return 0
+    local file="$1" tmp
+    tmp="$(mktemp)"
+    python3 - "$file" "$INCREMENTAL_BASELINE" > "$tmp" <<'PY'
+import json, sys
+known = {h.get("address") for h in json.load(open(sys.argv[2], encoding="utf-8")).get("hosts", [])}
+for line in open(sys.argv[1], encoding="utf-8"):
+    host = line.strip()
+    if host and host not in known:
+        print(host)
+PY
+    mv -f "$tmp" "$file"
+    chmod 600 "$file"
+}
+
+incremental_filter_ports_file() {
+    incremental_require || return 0
+    local file="$1" tmp
+    tmp="$(mktemp)"
+    python3 - "$file" "$INCREMENTAL_BASELINE" > "$tmp" <<'PY'
+import json, sys
+report = json.load(open(sys.argv[2], encoding="utf-8"))
+known = set()
+for host in report.get("hosts", []):
+    for port in host.get("ports", []):
+        if port.get("state") == "open":
+            known.add(str(port.get("port")))
+raw = open(sys.argv[1], encoding="utf-8").read().strip()
+ports = [p.strip() for p in raw.split(",") if p.strip()]
+print(",".join(p for p in ports if p not in known))
+PY
+    mv -f "$tmp" "$file"
+    chmod 600 "$file"
 }
 
 show_plan() {
@@ -135,6 +252,29 @@ run_nmap() {
 
 # ---------- single scan ----------
 
+explain_plan() {
+    printf '\n%s%sEXPLANATION%s\n' "${C_ACCENT:-}" "${C_BOLD:-}" "${C_RESET:-}"
+    printf '  profile origin:      %s\n' "${PROFILE:-<none>}"
+    printf '  profile risk:        %s\n' "$(profile_risk "${PROFILE:-standard}" 2>/dev/null || echo safe)"
+    if (( ${#OVERRIDE_TRACE[@]} )); then
+        local line
+        for line in "${OVERRIDE_TRACE[@]}"; do printf '  override:            %s\n' "$line"; done
+    else
+        printf '  override:            none\n'
+    fi
+    if (( ${#ADAPT_NOTES[@]} )); then
+        for line in "${ADAPT_NOTES[@]}"; do printf '  privilege adaptation: %s\n' "$line"; done
+    else
+        printf '  privilege adaptation: none\n'
+    fi
+    if (( ${#NSE_MISSING[@]} )); then
+        for line in "${NSE_MISSING[@]}"; do printf '  skipped NSE:         %s (not installed)\n' "$line"; done
+    else
+        printf '  skipped NSE:         none\n'
+    fi
+    printf '  policy:              %s%s\n' "${POLICY:-strict}" "$([[ ${ACK_RISK:-0} -eq 1 ]] && echo ' (ack-risk)')"
+}
+
 run_scan() {
     validate_profile "$PROFILE"
     if [[ "$PROFILE" != custom ]] && profile_needs_target "$PROFILE" && [[ ${#TARGETS[@]} -eq 0 ]]; then
@@ -142,6 +282,11 @@ run_scan() {
     fi
     if workflow_exists "$PROFILE"; then run_workflow; return; fi
 
+    incremental_filter_targets
+    if (( ${#TARGETS[@]} == 0 )); then
+        info "All targets are already present in the baseline; nothing to scan."
+        return 0
+    fi
     build_nmap_args "$PROFILE"
     prepare_run_dir
 
@@ -150,6 +295,7 @@ run_scan() {
     cmd_display="$(shell_quote "$NMAP_BIN" "${NMAP_ARGS[@]}" -oN nmap.txt -oX nmap.xml -oG nmap.gnmap "${tgt[@]}")"
     write_metadata "$cmd_display"
     show_plan "$cmd_display"
+    (( EXPLAIN )) && explain_plan
     preflight_checks || return 0
 
     START_EPOCH="$(date +%s)"
@@ -159,10 +305,12 @@ run_scan() {
     if (( rc != 0 )); then
         error "Nmap exited with status $rc"
         post_process "nmap" || true
+        audit_log "$rc" "$cmd_display" "${PLAN_HASH:-}"
         fix_ownership
         return "$rc"
     fi
     post_process "nmap"
+    audit_log 0 "$cmd_display" "${PLAN_HASH:-}"
 }
 
 # Confirmations shared by single scans and workflows. Returns 1 to cancel.
@@ -189,74 +337,188 @@ preflight_checks() {
 
 stage_banner() { printf '\n%s%s Stage %s/%s%s  %s%s%s\n' "$C_ACCENT" "$S_STEP" "$1" "$2" "$C_RESET" "$C_BOLD" "$3" "$C_RESET"; }
 
+stage_done() {
+    (( DRY_RUN )) && return 0
+    local files=() checksum=""
+    for files in "$RUN_DIR/stage-$1-$2.xml" "$RUN_DIR/stage-$1-$2.gnmap" "$RUN_DIR/nmap.xml"; do
+        [[ -f "$files" ]] || continue
+        checksum+="$(sha256sum "$files" 2>/dev/null | cut -d' ' -f1) "
+    done
+    printf '%s %s %s\n' "$(date +%s)" "$2" "${checksum:-none}" > "$RUN_DIR/stage-$1-$2.done"
+}
+
+stage_condition_met() {
+    local when="$1" ports_open="$2" count="$3" wanted p op n
+    local IFS=' '
+    [[ -z "$when" ]] && return 0
+    if [[ "$when" == port\ in\ * ]]; then
+        wanted="${when#port in }"
+        local IFS=','
+        for p in $wanted; do
+            [[ ",${ports_open// /}," == *",$p,"* ]] && return 0
+        done
+        return 1
+    fi
+    read -r op n <<< "${when#host_count }"
+    case "$op" in
+        ">") (( count > n )) ;;
+        "=") (( count == n )) ;;
+        *)   return 1 ;;
+    esac
+}
+
+stage_marker_valid() {
+    local idx="$1" name="$2" marker ts label checksum actual="" f
+    local IFS=' '
+    marker="$RUN_DIR/stage-$idx-$name.done"
+    [[ -f "$marker" ]] || return 1
+    read -r ts label checksum < "$marker"
+    checksum="$(printf '%s' "$checksum" | tr -s ' ' | sed 's/ $//')"
+    for f in "$RUN_DIR/stage-$idx-$name.xml" "$RUN_DIR/stage-$idx-$name.gnmap" "$RUN_DIR/nmap.xml"; do
+        [[ -f "$f" ]] || continue
+        actual+="$(sha256sum "$f" 2>/dev/null | cut -d' ' -f1) "
+    done
+    actual="$(printf '%s' "$actual" | tr -s ' ' | sed 's/ $//')"
+    [[ -n "$actual" && "$checksum" == "$actual" ]]
+}
+
 run_workflow() {
     local wf="$PROFILE"
-    prepare_run_dir
+    if [[ -n "${RESUME_DIR:-}" ]]; then
+        [[ -d "$RESUME_DIR" ]] || die "Resume directory not found: $RESUME_DIR"
+        umask 077
+        RUN_DIR="$(cd "$RESUME_DIR" && pwd)"
+        log_init
+        info "Resuming workflow from $RUN_DIR"
+    else
+        prepare_run_dir
+    fi
+    local -a rows=()
+    mapfile -t rows < <(stages_for_pipeline "$wf")
+    (( ${#rows[@]} )) || die "No stage records for workflow: $wf"
+    local total=${#rows[@]} row idx name wf_profile targets when stage_ports stage_scripts timeout on_fail
+    local cmd_display="workflow:$wf targets:${TARGETS[*]}"
     local with_os=0
     [[ "$wf" == inventory ]] && with_os=1
 
     section "Workflow: $wf"
-    printf '  %s1)%s discovery  ->  %s2)%s fast port scan of live hosts  ->  %s3)%s versions + scripts%s on open ports only\n' \
-        "$C_ACCENT" "$C_RESET" "$C_ACCENT" "$C_RESET" "$C_ACCENT" "$C_RESET" "$( ((with_os)) && echo ' + OS + traceroute' )"
+    printf '  %s%s%s stage(s) declared for %s%s\n' "$C_ACCENT" "$total" "$C_RESET" "$wf" \
+        "$( ((with_os)) && echo ' (OS + traceroute enabled)' )"
+    for row in "${rows[@]}"; do
+        idx="$(stage_field "$row" 2)"; name="$(stage_field "$row" 3)"
+        wf_profile="$(stage_field "$row" 4)"; targets="$(stage_field "$row" 5)"
+        when="$(stage_field "$row" 6)"
+        printf '    %s.%s %-10s %-10s %-11s %s\n' "$idx" "$C_RESET" "$name" "$wf_profile" "$targets" \
+            "${when:-always}"
+    done
     kv "Target" "$(target_display)"
     kv "Output" "$RUN_DIR"
-    write_metadata "workflow:$wf targets:${TARGETS[*]}"
+    write_metadata "$cmd_display"
     (( DRY_RUN )) && { info "Dry run - nothing was executed."; return 0; }
     confirm "Run this workflow?" || { info "Cancelled."; return 0; }
     START_EPOCH="$(date +%s)"
+    STAGE_SKIPPED=()
 
-    # ---- stage 1: discovery
-    stage_banner 1 3 "Host discovery"
-    local sp="${PORTS:-}" st="${TOP_PORTS:-}"
-    PORTS=""; TOP_PORTS=""
-    build_nmap_args discovery
-    PORTS="$sp"; TOP_PORTS="$st"
-    (( ${#ADAPT_NOTES[@]} )) && printf '  %s%s%s\n' "$C_YELLOW" "${ADAPT_NOTES[*]}" "$C_RESET"
-    run_nmap stage1-discovery "${TARGETS[@]}" || true
-    extract_hosts "$RUN_DIR/stage1-discovery.xml" "$RUN_DIR/hosts-up.txt"
-    local up; up=$(grep -c . "$RUN_DIR/hosts-up.txt" || true)
-    if (( up == 0 )); then
-        warn "No live hosts found. Hosts may block ping - try again with --no-ping (-Pn)."
-        post_process "stage1-discovery" "$RUN_DIR/stage1-discovery.xml" || true
-        return 0
-    fi
-    ok "$up live host(s)"
-
-    # ---- stage 2: fast ports on live hosts
-    stage_banner 2 3 "Fast port scan ($up hosts)"
-    build_nmap_args quick
-    NMAP_ARGS+=(-Pn -n)
-    run_nmap stage2-ports -iL "$RUN_DIR/hosts-up.txt" || true
-
-    local open_ports=""
-    if have_py; then
-        py_report ports "$RUN_DIR/stage2-ports.xml" > "$RUN_DIR/ports-open.txt" || true
-        open_ports="$(tr -d '\n' < "$RUN_DIR/ports-open.txt")"
-        py_report hosts-open "$RUN_DIR/stage2-ports.xml" > "$RUN_DIR/hosts-open.txt" || true
-    else
-        # shellcheck disable=SC2016
-        open_ports="$(grep -oE 'Ports: .*' "$RUN_DIR/stage2-ports.gnmap" 2>/dev/null | grep -oE '[0-9]+/open' | cut -d/ -f1 | sort -un | paste -sd, - || true)"
-        grep 'Ports:' "$RUN_DIR/stage2-ports.gnmap" 2>/dev/null | awk '/\/open\//{print $2}' > "$RUN_DIR/hosts-open.txt" || true
-    fi
-    if [[ -z "$open_ports" ]]; then
-        warn "No open ports found on live hosts."
-        post_process "stage2-ports" "$RUN_DIR/stage1-discovery.xml" "$RUN_DIR/stage2-ports.xml" || true
-        return 0
-    fi
-    local nh; nh=$(grep -c . "$RUN_DIR/hosts-open.txt" || true)
-    ok "${nh} host(s) with open ports: ${open_ports}"
-
-    # ---- stage 3: deep dive on what actually exists
-    stage_banner 3 3 "Service & script analysis on ports ${open_ports}"
-    local save_ports="${PORTS:-}" save_top="${TOP_PORTS:-}"
-    PORTS="$open_ports"; TOP_PORTS=""
-    build_nmap_args default
-    PORTS="$save_ports"; TOP_PORTS="$save_top"
-    NMAP_ARGS+=(--script "$SCRIPTS_DIR/odoo-info.nse")
-    if (( with_os )); then NMAP_ARGS+=(-O --traceroute --osscan-guess); adapt_args_for_privileges; fi
-    NMAP_ARGS+=(-Pn -n)
-    run_nmap nmap -iL "$RUN_DIR/hosts-open.txt" || true
-    post_process "nmap" "$RUN_DIR/stage1-discovery.xml" "$RUN_DIR/stage2-ports.xml" "$RUN_DIR/nmap.xml"
+    local open_ports="" up=0 current_count=0 rc=0 base
+    local -a tgt=() xmls=()
+    for row in "${rows[@]}"; do
+        idx="$(stage_field "$row" 2)"; name="$(stage_field "$row" 3)"
+        wf_profile="$(stage_field "$row" 4)"; targets="$(stage_field "$row" 5)"
+        when="$(stage_field "$row" 6)"; stage_ports="$(stage_field "$row" 7)"
+        stage_scripts="$(stage_field "$row" 8)"; timeout="$(stage_field "$row" 9)"
+        on_fail="$(stage_field "$row" 10)"
+        debug "stage $name timeout=$timeout on_fail=$on_fail"
+        if [[ -n "${STAGE:-}" && "$STAGE" != "$name" ]]; then
+            STAGE_SKIPPED+=("$name")
+            info "Skipping stage $name (--stage ${STAGE})."
+            continue
+        fi
+        case "$targets" in
+            original)
+                tgt=("${TARGETS[@]}"); current_count=${#TARGETS[@]} ;;
+            hosts-up)
+                [[ -s "$RUN_DIR/hosts-up.txt" ]] || die "Stage artifact hosts-up.txt is missing; run discovery first."
+                tgt=(-iL "$RUN_DIR/hosts-up.txt")
+                current_count=$(grep -c . "$RUN_DIR/hosts-up.txt" || true)
+                up="$current_count" ;;
+            hosts-open)
+                [[ -s "$RUN_DIR/hosts-open.txt" ]] || die "Stage artifact hosts-open.txt is missing; run ports first."
+                tgt=(-iL "$RUN_DIR/hosts-open.txt")
+                current_count=$(grep -c . "$RUN_DIR/hosts-open.txt" || true)
+                open_ports="$(tr -d '\n' < "$RUN_DIR/ports-open.txt" 2>/dev/null || true)" ;;
+        esac
+        if ! stage_condition_met "$when" "$open_ports" "$current_count"; then
+            STAGE_SKIPPED+=("$name")
+            info "Skipping stage $name (condition: $when)."
+            continue
+        fi
+        if [[ -n "${RESUME_DIR:-}" ]] && stage_marker_valid "$idx" "$name"; then
+            info "Stage $name already complete; using existing artifacts."
+            [[ "$name" == discovery ]] && up=$(grep -c . "$RUN_DIR/hosts-up.txt" || true)
+            [[ "$name" == ports ]] && open_ports="$(tr -d '\n' < "$RUN_DIR/ports-open.txt" 2>/dev/null || true)"
+            continue
+        fi
+        stage_banner "$idx" "$total" "$name"
+        local save_ports="${PORTS:-}" save_top="${TOP_PORTS:-}"
+        case "$name" in
+            discovery) PORTS=""; TOP_PORTS="" ;;
+            ports)     [[ -z "$stage_ports" ]] || PORTS="$stage_ports" ;;
+            services)  PORTS="$open_ports"; TOP_PORTS="" ;;
+        esac
+        build_nmap_args "$wf_profile"
+        PORTS="$save_ports"; TOP_PORTS="$save_top"
+        [[ -z "$stage_scripts" ]] || NMAP_ARGS+=(--script "$stage_scripts")
+        [[ "$name" == services ]] && NMAP_ARGS+=(--script "$SCRIPTS_DIR/odoo-info.nse")
+        if (( with_os )) && [[ "$name" == services ]]; then
+            NMAP_ARGS+=(-O --traceroute --osscan-guess)
+            adapt_args_for_privileges
+        fi
+        [[ "$name" == discovery ]] || NMAP_ARGS+=(-Pn -n)
+        base="stage$idx-$name"
+        [[ "$name" == services ]] && base=nmap
+        rc=0
+        run_nmap "$base" "${tgt[@]}" || rc=$?
+        if (( rc != 0 && "$on_fail" == abort )); then
+            audit_log "$rc" "$cmd_display" "${PLAN_HASH:-}"
+            die "Stage $name failed with status $rc"
+        fi
+        (( rc != 0 )) && warn "Stage $name failed (on_fail=continue)."
+        case "$name" in
+            discovery)
+                extract_hosts "$RUN_DIR/$base.xml" "$RUN_DIR/hosts-up.txt"
+                incremental_filter_hosts_file "$RUN_DIR/hosts-up.txt"
+                up=$(grep -c . "$RUN_DIR/hosts-up.txt" || true)
+                (( up > 0 )) || warn "No live hosts found. Hosts may block ping - try again with --no-ping (-Pn)."
+                ok "$up live host(s)" ;;
+            ports)
+                if have_py; then
+                    py_report ports "$RUN_DIR/$base.xml" > "$RUN_DIR/ports-open.txt" || true
+                    py_report hosts-open "$RUN_DIR/$base.xml" > "$RUN_DIR/hosts-open.txt" || true
+                else
+                    open_ports="$(grep -oE 'Ports: .*' "$RUN_DIR/$base.gnmap" 2>/dev/null | grep -oE '[0-9]+/open' | cut -d/ -f1 | sort -un | paste -sd, - || true)"
+                    printf '%s' "$open_ports" > "$RUN_DIR/ports-open.txt"
+                    grep 'Ports:' "$RUN_DIR/$base.gnmap" 2>/dev/null | awk '/\/open\//{print $2}' > "$RUN_DIR/hosts-open.txt" || true
+                fi
+                incremental_filter_ports_file "$RUN_DIR/ports-open.txt"
+                incremental_filter_hosts_file "$RUN_DIR/hosts-open.txt"
+                open_ports="$(tr -d '\n' < "$RUN_DIR/ports-open.txt" 2>/dev/null || true)"
+                if [[ -z "$open_ports" ]]; then
+                    warn "No open ports found on live hosts."
+                else
+                    ok "$(grep -c . "$RUN_DIR/hosts-open.txt" || true) host(s) with open ports: $open_ports"
+                fi ;;
+        esac
+        stage_done "$idx" "$name"
+        [[ "$name" == discovery && $up -eq 0 ]] && break
+        [[ "$name" == ports && -z "$open_ports" ]] && break
+    done
+    xmls=()
+    for idx in "${STAGE_FILES[@]}"; do
+        [[ -f "$RUN_DIR/$idx.xml" ]] && xmls+=("$RUN_DIR/$idx.xml")
+    done
+    (( ${#xmls[@]} )) && post_process nmap "${xmls[@]}"
+    write_metadata "$cmd_display"
+    audit_log 0 "$cmd_display" "${PLAN_HASH:-}"
 }
 
 # ---------- post-processing ----------
@@ -333,10 +595,12 @@ post_process() {
     write_summary
 
     if have_py; then
-        local lat=() fmt_args=(--formats "$REPORT_FORMATS")
+        local lat=() fmt_args=(--formats "$REPORT_FORMATS") diff_args=()
+        find_previous_report
+        [[ -n "$PREV_REPORT" ]] && diff_args=(--diff-report "$PREV_REPORT")
         [[ -s "$RUN_DIR/host-latency.tsv" ]] && lat=(--latency "$RUN_DIR/host-latency.tsv")
         py_report report --outdir "$RUN_DIR" --meta "$RUN_DIR/metadata.json" "${fmt_args[@]}" "${lat[@]}" \
-            --xml "${xmls[@]}" > /dev/null || warn "Report generation failed (see toolkit.log)."
+            "${diff_args[@]}" --xml "${xmls[@]}" > /dev/null || warn "Report generation failed (see toolkit.log)."
         py_report dashboard "$RUN_DIR/report.json" --width "$(( UI_COLS > 100 ? 100 : UI_COLS ))" || true
         compare_with_previous
     else
@@ -354,21 +618,25 @@ post_process() {
     finish_hooks
 }
 
-compare_with_previous() {
-    local label prev d
+find_previous_report() {
+    local label d
+    PREV_REPORT=""
     label="_${PROFILE}_$(target_label)"
-    prev=""
     while IFS= read -r d; do
         [[ "$d" == "$RUN_DIR" ]] && continue
-        [[ -f "$d/report.json" ]] && prev="$d"
+        [[ -f "$d/report.json" ]] || continue
+        [[ "$(basename "$d")" < "$(basename "$RUN_DIR")" ]] || continue
+        PREV_REPORT="$d/report.json"
     done < <(find "$OUTPUT_DIR" -maxdepth 1 -type d -name "*${label}*" 2>/dev/null | sort)
-    [[ -n "$prev" ]] || return 0
-    # only compare against runs older than this one
-    [[ "$(basename "$prev")" < "$(basename "$RUN_DIR")" ]] || return 0
+}
+
+compare_with_previous() {
+    [[ -n "$PREV_REPORT" ]] || find_previous_report
+    [[ -n "$PREV_REPORT" ]] || return 0
     section "Changes since previous run"
-    hint "baseline: $(basename "$prev")"
-    py_report diff "$prev/report.json" "$RUN_DIR/report.json" || true
-    python3 -I "$LIB_DIR/report.py" diff "$prev/report.json" "$RUN_DIR/report.json" > "$RUN_DIR/diff-vs-previous.txt" || true
+    hint "baseline: $(basename "$(dirname "$PREV_REPORT")")"
+    py_report diff "$PREV_REPORT" "$RUN_DIR/report.json" || true
+    python3 -I "$LIB_DIR/report.py" diff "$PREV_REPORT" "$RUN_DIR/report.json" > "$RUN_DIR/diff-vs-previous.txt" || true
 }
 
 finish_hooks() {

@@ -18,19 +18,21 @@ from __future__ import annotations
 import argparse
 import csv
 import datetime as dt
+import hashlib
 import html
 import ipaddress
 import itertools
 import json
 import os
 import re
+import shutil
 import socket
 import sys
 import threading
 import xml.etree.ElementTree as ET
 from collections import Counter, OrderedDict
 
-VERSION = "2.0.0"
+VERSION = "2.1.0"
 SEVERITIES = ["CRITICAL", "HIGH", "MEDIUM", "LOW", "INFO"]
 SEV_RANK = {s: i for i, s in enumerate(SEVERITIES)}
 # Odoo majors older than this are reported as likely out of support (edit to taste).
@@ -386,6 +388,9 @@ def build_report(xml_paths, meta, latency=None):
                                  "detail": sc["output"][:600], "advice": "Enable DHCP snooping on switches.",
                                  "source": sc["id"]})
     findings.sort(key=lambda x: (SEV_RANK[x["severity"]], x["host"], x["port"] or 0))
+    for f in findings:
+        f.setdefault("rule_id", rule_id_for(f))
+        f.setdefault("suppressed", False)
 
     up = [h for h in hosts if h["status"] == "up"]
     open_total = sum(1 for h in hosts for p in h["ports"] if p["state"] == "open")
@@ -397,7 +402,7 @@ def build_report(xml_paths, meta, latency=None):
     if len(scans) > 1 and hosts:
         hosts_up = max(hosts_up, len(up))
     return {
-        "schema": 1, "generator": f"xamltech-nmap-toolkit {VERSION}",
+        "schema": 1, "schema_version": 2, "generator": f"xamltech-nmap-toolkit {VERSION}",
         "generated": dt.datetime.now().astimezone().isoformat(timespec="seconds"),
         "meta": meta,
         "scan": {"stages": scans, "elapsed": round(sum(s["elapsed"] for s in scans), 2),
@@ -456,10 +461,10 @@ def write_csvs(rep, outdir):
                     p["product"], p["version"], p["extrainfo"], " ".join(p["cpe"]))])
     with open(os.path.join(outdir, "findings.csv"), "w", newline="", encoding="utf-8") as fh:
         w = csv.writer(fh)
-        w.writerow(["severity", "host", "port", "proto", "title", "detail", "advice", "source"])
+        w.writerow(["rule_id", "severity", "host", "port", "proto", "title", "detail", "advice", "source"])
         for x in rep["findings"]:
-            w.writerow([csv_safe(v) for v in (x["severity"], x["host"], x["port"] or "", x["proto"] or "",
-                                              x["title"], x["detail"], x["advice"], x["source"])])
+            w.writerow([csv_safe(v) for v in (x.get("rule_id", ""), x["severity"], x["host"], x["port"] or "",
+                                              x["proto"] or "", x["title"], x["detail"], x["advice"], x["source"])])
 
 
 def write_markdown(rep, outdir):
@@ -473,10 +478,10 @@ def write_markdown(rep, outdir):
           f"{st['findings']['CRITICAL']} | {st['findings']['HIGH']} | {st['findings']['MEDIUM']} | {st['findings']['LOW']} |", ""]
     if rep["findings"]:
         L += ["## Findings", "", "> Heuristic hints derived from scan data - verify before acting.", "",
-              "| Severity | Host | Port | Finding | Recommendation |", "|---|---|---|---|---|"]
+              "| Rule | Severity | Host | Port | Finding | Recommendation |", "|---|---|---|---|---|---|"]
         for x in rep["findings"]:
             port = f"{x['port']}/{x['proto']}" if x["port"] else "-"
-            L.append(f"| {x['severity']} | {md_safe(x['host'])} | {port} | {md_safe(x['title'])} | {md_safe(x['advice'])} |")
+            L.append(f"| {md_safe(x.get('rule_id', ''))} | {x['severity']} | {md_safe(x['host'])} | {port} | {md_safe(x['title'])} | {md_safe(x['advice'])} |")
         L.append("")
     L += ["## Hosts", ""]
     for h in rep["hosts"]:
@@ -528,6 +533,10 @@ h2{margin:30px 0 12px;font-size:19px;border-left:4px solid var(--c1);padding-lef
 table{width:100%;border-collapse:collapse;background:var(--panel);border:1px solid var(--line);border-radius:12px;overflow:hidden}
 th,td{padding:9px 12px;text-align:left;border-bottom:1px solid var(--line);vertical-align:top;font-size:14px}
 th{background:var(--panel2);color:var(--mut);font-size:12px;text-transform:uppercase;letter-spacing:.7px}tr:last-child td{border:0}
+th.sortable{cursor:pointer;user-select:none}th.sortable:hover{color:var(--text)}th .arrow{opacity:.4;font-size:10px}
+.diffgrid{display:grid;grid-template-columns:1fr 1fr;gap:14px}.diffbox{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:12px}
+.diffbox h3{margin:0 0 8px;font-size:14px;color:var(--mut);text-transform:uppercase;letter-spacing:.6px}
+.diffbox ul{margin:0;padding-left:18px;font-size:13px}.plus{color:#1a8f5a}.minus{color:#c8414b}.chg{color:#a87516}
 .sev{display:inline-block;padding:1px 9px;border-radius:6px;font-size:12px;font-weight:700;color:#06101f}
 .CRITICAL{background:var(--crit);color:#fff}.HIGH{background:var(--high)}.MEDIUM{background:var(--med)}.LOW{background:var(--low)}.INFO{background:var(--info)}
 .toolbar{display:flex;gap:10px;flex-wrap:wrap;margin:8px 0 14px}
@@ -539,7 +548,7 @@ summary small{color:var(--mut);font-weight:400}.body{padding:0 16px 14px}
 pre{background:var(--panel2);border:1px solid var(--line);border-radius:8px;padding:10px;overflow:auto;font-size:12.5px;white-space:pre-wrap;word-break:break-word;margin:6px 0}
 .mono{font-family:ui-monospace,Menlo,Consolas,monospace}.mut{color:var(--mut)}.tag{background:var(--panel2);border-radius:6px;padding:1px 7px;font-size:12px;margin-right:4px}
 footer{color:var(--mut);font-size:12.5px;margin-top:40px;border-top:1px solid var(--line);padding-top:14px}
-@media print{header{background:#fff;color:#000}.toolbar{display:none}details{break-inside:avoid}}
+@media print{header{background:#fff;color:#000}.toolbar{display:none}details{break-inside:avoid}.diffgrid{break-inside:avoid}}
 </style></head><body>
 <header><h1>XamlTech Nmap Toolkit report</h1>
 <p>__SUBTITLE__</p><div class="chips">__CHIPS__</div></header>
@@ -549,6 +558,8 @@ footer{color:var(--mut);font-size:12.5px;margin-top:40px;border-top:1px solid va
 <h2>Findings</h2>
 <div class="toolbar" id="sevfilter">__SEVBUTTONS__</div>
 __FINDINGS__
+<h2>Changes since previous run</h2>
+__DIFF__
 __PRESCRIPTS__
 <h2>Hosts</h2>
 <div class="toolbar"><input id="q" placeholder="Filter hosts, ports, services..." size="36"></div>
@@ -566,6 +577,15 @@ var btns=document.querySelectorAll('#sevfilter button');
 btns.forEach(function(b){b.addEventListener('click',function(){
 btns.forEach(function(x){x.classList.remove('on')});b.classList.add('on');var s=b.dataset.sev;
 document.querySelectorAll('#ftable tbody tr').forEach(function(r){r.style.display=(s==='ALL'||r.dataset.sev===s)?'':'none'})})});
+var rank={CRITICAL:0,HIGH:1,MEDIUM:2,LOW:3,INFO:4};
+document.querySelectorAll('#ftable th').forEach(function(th,i){th.classList.add('sortable');
+th.addEventListener('click',function(){var table=document.getElementById('ftable'),body=table.tBodies[0],
+rows=Array.prototype.slice.call(body.rows),asc=th.dataset.dir!=='asc';th.dataset.dir=asc?'asc':'desc';
+rows.sort(function(a,b){var x=a.cells[i]?a.cells[i].textContent.trim():'',y=b.cells[i]?b.cells[i].textContent.trim():'';
+if(i===0){x=rank[a.dataset.sev];y=rank[b.dataset.sev]}var n=parseFloat(x),m=parseFloat(y);
+if(!isNaN(n)&&!isNaN(m)){return asc?n-m:m-n}return asc?x.localeCompare(y):y.localeCompare(x)});
+rows.forEach(function(r){body.appendChild(r)});var old=th.querySelector('.arrow');if(old)old.remove();
+var ar=document.createElement('span');ar.className='arrow';ar.textContent=asc?' ▲':' ▼';th.appendChild(ar)})});
 })();
 </script></body></html>
 """
@@ -575,7 +595,28 @@ def esc(v):
     return html.escape("" if v is None else str(v), quote=True)
 
 
-def write_html(rep, outdir):
+def html_diff(d):
+    if not d:
+        return '<p class="mut">No previous run was available for comparison.</p>'
+    prev, curr = [], []
+    prev += [f'<li class="minus">host gone: {esc(h)}</li>' for h in d["hosts_gone"]]
+    curr += [f'<li class="plus">host up: {esc(h)}</li>' for h in d["hosts_new"]]
+    prev += [f'<li class="minus">port closed: {esc(h)} {esc(p)}/{esc(n)}</li>' for h, p, n in d["ports_closed"]]
+    curr += [f'<li class="plus">port opened: {esc(h)} {esc(p)}/{esc(n)}</li>' for h, p, n in d["ports_opened"]]
+    for k, old, new in d["service_changed"]:
+        host, proto, port = k
+        prev.append(f'<li class="minus">{esc(host)} {esc(port)}/{esc(proto)}: {esc(old)}</li>')
+        curr.append(f'<li class="plus">{esc(host)} {esc(port)}/{esc(proto)}: {esc(new)}</li>')
+    prev += [f'<li class="minus">finding resolved: {esc(x[2])} ({esc(x[0])})</li>' for x in d["findings_resolved"]]
+    curr += [f'<li class="plus">new finding: {esc(x["title"])} ({esc(x["host"])})</li>' for x in d["findings_new"]]
+    if not prev and not curr:
+        return '<p class="mut">No changes since the previous run.</p>'
+    cell = lambda title, items: (f'<div class="diffbox"><h3>{title}</h3><ul>'
+                                 + ("".join(items) or '<li class="mut">none</li>') + "</ul></div>")
+    return '<div class="diffgrid">' + cell("Earlier run", prev) + cell("Current run", curr) + "</div>"
+
+
+def write_html(rep, outdir, diff=None):
     st, meta = rep["stats"], rep["meta"]
     fnd = st["findings"]
     total_f = sum(fnd.values())
@@ -598,12 +639,15 @@ def write_html(rep, outdir):
         f'<button data-sev="{s}">{s} ({fnd[s]})</button>' for s in SEVERITIES if fnd[s])
     if rep["findings"]:
         rows = "".join(
-            f'<tr data-sev="{x["severity"]}"><td><span class="sev {x["severity"]}">{x["severity"]}</span></td>'
+            f'<tr data-sev="{x["severity"]}" data-rule="{esc(x.get("rule_id", ""))}"><td><span class="sev {x["severity"]}">{x["severity"]}</span></td>'
+            f'<td class="mono">{esc(x.get("rule_id", ""))}</td>'
             f'<td class="mono">{esc(x["host"])}</td><td class="mono">{esc(str(x["port"]) + "/" + x["proto"]) if x["port"] else "-"}</td>'
             f'<td><b>{esc(x["title"])}</b>' + (f'<pre>{esc(x["detail"])}</pre>' if x["detail"] else "") + "</td>"
             f'<td class="mut">{esc(x["advice"])}</td></tr>' for x in rep["findings"])
-        findings = ('<table id="ftable"><thead><tr><th>Severity</th><th>Host</th><th>Port</th><th>Finding</th><th>Recommendation</th></tr></thead>'
-                    f"<tbody>{rows}</tbody></table>")
+        findings = ('<table id="ftable"><thead><tr>'
+                    '<th class="sortable">Severity</th><th class="sortable">Rule</th><th class="sortable">Host</th>'
+                    '<th class="sortable">Port</th><th class="sortable">Finding</th><th class="sortable">Recommendation</th>'
+                    '</tr></thead>' f"<tbody>{rows}</tbody></table>")
     else:
         findings = '<p class="mut">No findings were derived from this scan.</p>'
     pre = ""
@@ -654,7 +698,7 @@ def write_html(rep, outdir):
             .replace("__SUBTITLE__", esc(f"{meta.get('profile', 'scan')} profile · {rep['generated']}"))
             .replace("__CHIPS__", chips).replace("__CARDS__", cards)
             .replace("__SEVBAR__", bar + legend).replace("__SEVBUTTONS__", buttons)
-            .replace("__FINDINGS__", findings).replace("__PRESCRIPTS__", pre)
+            .replace("__FINDINGS__", findings).replace("__DIFF__", html_diff(diff)).replace("__PRESCRIPTS__", pre)
             .replace("__HOSTS__", "".join(hosts_html) or '<p class="mut">No hosts to display.</p>')
             .replace("__COMMAND__", esc(cmd)).replace("__VERSION__", esc(VERSION))
             .replace("__GENERATED__", esc(rep["generated"])))
@@ -749,6 +793,46 @@ def load_report(path):
         return json.load(fh)
 
 
+def file_sha256(path):
+    h = hashlib.sha256()
+    with open(path, "rb") as fh:
+        for chunk in iter(lambda: fh.read(65536), b""):
+            h.update(chunk)
+    return h.hexdigest()
+
+
+def rule_id_for(f):
+    source = re.sub(r"[^A-Za-z0-9]", "-", str(f.get("source") or "generic")).upper()
+    digest = hashlib.sha1((str(f.get("title", "")) + str(f.get("host", ""))).encode()).hexdigest()[:6]
+    return f"XT-{source[:18].strip('-') or 'GENERIC'}-{digest}"
+
+
+def finding_key(f):
+    return (f.get("severity", ""), f.get("host", ""), f.get("port"), f.get("proto", ""),
+            f.get("title", ""), f.get("source", ""))
+
+
+def finding_key_str(f):
+    payload = json.dumps(finding_key(f), sort_keys=True, default=list).encode()
+    return hashlib.sha256(payload).hexdigest()[:16]
+
+
+def load_baseline(path):
+    with open(path, encoding="utf-8") as fh:
+        data = json.load(fh)
+    return set(data.get("suppressed", []))
+
+
+def apply_baseline(rep, suppressed):
+    count = 0
+    for f in rep.get("findings", []):
+        if finding_key_str(f) in suppressed:
+            f["suppressed"] = True
+            count += 1
+    rep.setdefault("baseline", {})["suppressed_count"] = count
+    return count
+
+
 def port_map(rep):
     m = {}
     for h in rep["hosts"]:
@@ -771,7 +855,8 @@ def compute_diff(a, b):
         "ports_closed": sorted(k for k in pa if k not in pb and k[0] in (ha & hb)),
         "service_changed": sorted((k, pa[k], pb[k]) for k in pa if k in pb and pa[k] != pb[k]),
         "findings_new": [fb[k] for k in fb if k not in fa],
-        "findings_resolved": sorted(k for k in fa if k not in fb),
+        "findings_resolved": sorted((k for k in fa if k not in fb),
+                                    key=lambda k: (k[0], k[1] or 0, k[2])),
     }
 
 
@@ -921,8 +1006,42 @@ def cmd_classify(targets):
 
 
 def cmd_scope(scope_file, targets):
-    nets, names = [], []
+    nets, names, deny_nets, deny_names = [], [], [], []
+    max_hosts, valid_from, valid_until = None, None, None
     with open(scope_file, encoding="utf-8") as fh:
+        raw_scope = fh.read()
+    if raw_scope.lstrip().startswith("{"):
+        data = json.loads(raw_scope)
+        allow = data.get("allow", [])
+        deny = data.get("deny", [])
+        for entry in allow + deny:
+            try:
+                (nets if entry in allow else deny_nets).append(ipaddress.ip_network(entry, strict=False))
+            except ValueError:
+                (names if entry in allow else deny_names).append(str(entry).lower())
+        max_hosts = data.get("max_hosts")
+        valid_from = data.get("valid_from")
+        valid_until = data.get("valid_until")
+        expires = data.get("expires")
+        now = dt.datetime.now().astimezone()
+        for label, value in (("valid_from", valid_from), ("valid_until", valid_until), ("expires", expires)):
+            if not value:
+                continue
+            try:
+                moment = dt.datetime.fromisoformat(value.replace("Z", "+00:00"))
+            except ValueError:
+                print(f"  invalid {label} in scope file: {value}")
+                sys.exit(4)
+            if moment.tzinfo is None:
+                moment = moment.astimezone()
+            if (label == "valid_from" and now < moment) or (label != "valid_from" and now > moment):
+                print(f"  scope {label} violation: {value}")
+                sys.exit(4)
+        if max_hosts is not None and len(targets) > int(max_hosts):
+            print(f"  too many targets: {len(targets)} > max_hosts={max_hosts}")
+            sys.exit(4)
+    else:
+      with open(scope_file, encoding="utf-8") as fh:
         for line in fh:
             line = line.split("#", 1)[0].strip()
             if not line:
@@ -953,6 +1072,16 @@ def cmd_scope(scope_file, targets):
                 return True
         return False
 
+    def denied(name):
+        low = name.lower().rstrip(".")
+        if any(low == s or (s.startswith("*.") and low.endswith(s[1:])) for s in deny_names):
+            return True
+        try:
+            addr = ipaddress.ip_address(name.split("%")[0])
+            return any(addr in n for n in deny_nets if n.version == addr.version)
+        except ValueError:
+            return False
+
     bad = []
     for t in targets:
         try:
@@ -969,10 +1098,92 @@ def cmd_scope(scope_file, targets):
             else:
                 resolved = _resolve(t)
                 ok = bool(resolved) and all(ip_ok(i) for i in resolved)
+        if denied(t):
+            ok = False
+            print(f"  explicitly denied: {t}")
         if not ok:
             bad.append(t)
             print(f"  out of scope: {t}")
-    sys.exit(1 if bad else 0)
+    sys.exit(4 if bad else 0)
+
+
+# --------------------------------------------------------------------------- #
+# CI integrations
+# --------------------------------------------------------------------------- #
+def sarif_level(sev):
+    return {"CRITICAL": "error", "HIGH": "error", "MEDIUM": "warning", "LOW": "note"}.get(sev, "note")
+
+
+def build_sarif(rep):
+    findings = [f for f in rep.get("findings", []) if not f.get("suppressed")]
+    rules, seen = [], set()
+    for f in findings:
+        rid = f.get("rule_id") or rule_id_for(f)
+        if rid in seen:
+            continue
+        seen.add(rid)
+        rules.append({"id": rid, "name": rid, "shortDescription": {"text": f.get("title", "Finding")},
+                      "defaultConfiguration": {"level": sarif_level(f.get("severity", "LOW"))}})
+    results = []
+    for f in findings:
+        loc = {"physicalLocation": {"artifactLocation": {"uri": "nmap.xml"},
+                                    "region": {"startLine": 1}}}
+        if f.get("host"):
+            loc["logicalLocations"] = [{"name": str(f["host"]),
+                                        "fullyQualifiedName": f"{f['host']}:{f.get('port') or ''}"}]
+        results.append({"ruleId": f.get("rule_id") or rule_id_for(f),
+                        "level": sarif_level(f.get("severity", "LOW")),
+                        "message": {"text": f.get("title", "Finding")},
+                        "locations": [loc]})
+    return {"$schema": "https://json.schemastore.org/sarif-2.1.0.json", "version": "2.1.0",
+            "runs": [{"tool": {"driver": {"name": "xamltech-nmap-toolkit",
+                                          "version": rep.get("generator", VERSION), "rules": rules}},
+                      "results": results}]}
+
+
+def cmd_sarif(a):
+    rep = load_report(a.run)
+    data = build_sarif(rep)
+    with open(a.output, "w", encoding="utf-8") as fh:
+        json.dump(data, fh, indent=2, ensure_ascii=False)
+
+
+def cmd_baseline(a):
+    if a.action == "create":
+        rep = load_report(a.run)
+        keys = sorted(finding_key_str(f) for f in rep.get("findings", []))
+        with open(a.baseline, "w", encoding="utf-8") as fh:
+            json.dump({"schema_version": 1, "generated": dt.datetime.now().astimezone().isoformat(),
+                       "suppressed": keys}, fh, indent=2)
+        print(f"Baseline written: {len(keys)} findings")
+    else:
+        keys = load_baseline(a.baseline)
+        rep = load_report(a.run)
+        matched = sum(1 for f in rep.get("findings", []) if finding_key_str(f) in keys)
+        print(f"Matches: {matched}")
+        sys.exit(0 if matched else 1)
+
+
+def notify(a, rep):
+    payload = json.dumps({"tool": "xamltech-nmap-toolkit", "version": VERSION,
+                          "generated": rep.get("generated", ""),
+                          "stats": rep.get("stats", {}),
+                          "findings": rep.get("findings", [])[:50]}, default=list).encode()
+    if getattr(a, "webhook", None):
+        from urllib.request import Request, urlopen
+        req = Request(a.webhook, data=payload, headers={"Content-Type": "application/json"})
+        try:
+            with urlopen(req, timeout=5):
+                pass
+        except Exception as exc:
+            print(f"webhook notification failed: {exc}", file=sys.stderr)
+    if getattr(a, "email", None) and shutil.which("sendmail"):
+        import subprocess
+        text = f"Subject: XamlTech scan complete\n\n{rep.get('stats', {})}\n".encode()
+        try:
+            subprocess.run(["sendmail", a.email], input=text, timeout=5, check=False)
+        except Exception as exc:
+            print(f"email notification failed: {exc}", file=sys.stderr)
 
 
 # --------------------------------------------------------------------------- #
@@ -1004,6 +1215,13 @@ def cmd_export(a):
                 host = f"[{h['address']}]" if h["addr_type"] == "ipv6" else h["address"]
                 default = (tls and p["port"] == 443) or (not tls and p["port"] == 80)
                 out.append(f"{'https' if tls else 'http'}://{host}" + ("" if default else f":{p['port']}"))
+    if a.kind == "csv-coords":
+        out = ["host,port,proto,service"]
+        out += [f"{h['address']},{p['port']},{p['proto']},{p['service']}" for h in up for p in h["ports"]
+                if p["state"] == "open"]
+    elif a.kind == "json-arm":
+        out = [json.dumps([{"ip": h["address"], "ports": [p["port"] for p in h["ports"] if p["state"] == "open"]}
+                           for h in up])]
     print("\n".join(out))
 
 
@@ -1021,6 +1239,9 @@ def cmd_report(a):
             meta["command"] = cf.read().strip()
     rep = build_report(a.xml, meta, read_latency(a.latency))
     os.makedirs(a.outdir, exist_ok=True)
+    rep["integrity"] = {"native_sha256": {os.path.basename(p): file_sha256(p) for p in a.xml if os.path.isfile(p)}}
+    if getattr(a, "baseline", None):
+        apply_baseline(rep, load_baseline(a.baseline))
     fmts = {f.strip() for f in a.formats.split(",") if f.strip()}
     with open(os.path.join(a.outdir, "report.json"), "w", encoding="utf-8") as fh:   # always: diff/history depend on it
         json.dump(rep, fh, indent=2, ensure_ascii=False)
@@ -1029,37 +1250,61 @@ def cmd_report(a):
     if "md" in fmts:
         write_markdown(rep, a.outdir)
     if "html" in fmts:
-        write_html(rep, a.outdir)
+        diff = None
+        if getattr(a, "diff_report", None) and os.path.isfile(a.diff_report):
+            try:
+                diff = compute_diff(load_report(a.diff_report), rep)
+            except (ValueError, KeyError, OSError):
+                diff = None
+        write_html(rep, a.outdir, diff)
 
 
 def main(argv=None):
     ap = argparse.ArgumentParser(prog="report.py")
     sub = ap.add_subparsers(dest="cmd", required=True)
+    sub.add_parser("version")
     p = sub.add_parser("report")
     p.add_argument("--xml", nargs="+", required=True)
     p.add_argument("--outdir", required=True)
     p.add_argument("--meta")
     p.add_argument("--latency")
     p.add_argument("--formats", default="json,csv,md,html")
+    p.add_argument("--baseline")
+    p.add_argument("--diff-report")
+    p.add_argument("--webhook")
+    p.add_argument("--email")
+    p = sub.add_parser("sarif")
+    p.add_argument("run"); p.add_argument("-o", "--output", required=True)
+    p = sub.add_parser("baseline")
+    p.add_argument("action", choices=["create", "check"])
+    p.add_argument("run"); p.add_argument("-b", "--baseline", required=True)
     p = sub.add_parser("dashboard")
     p.add_argument("json"); p.add_argument("--color", action="store_true"); p.add_argument("--width", type=int, default=100)
     p = sub.add_parser("diff")
     p.add_argument("a"); p.add_argument("b"); p.add_argument("--color", action="store_true")
     p.add_argument("--json", action="store_true"); p.add_argument("--fail-on-change", action="store_true")
+    p.add_argument("--fail-on", choices=["CRITICAL", "HIGH", "MEDIUM", "LOW", "critical", "high", "medium", "low"])
     p = sub.add_parser("history")
     p.add_argument("root"); p.add_argument("--color", action="store_true"); p.add_argument("--width", type=int, default=100)
     for name in ("hosts-up", "hosts-open", "ports"):
         p = sub.add_parser(name)
         p.add_argument("xml")
     p = sub.add_parser("export")
-    p.add_argument("kind", choices=["hosts", "hostports", "ports", "urls", "openvas"]); p.add_argument("run")
+    p.add_argument("kind", choices=["hosts", "hostports", "ports", "urls", "openvas", "csv-coords", "json-arm"]); p.add_argument("run")
     p = sub.add_parser("classify"); p.add_argument("targets", nargs="+")
     p = sub.add_parser("scope"); p.add_argument("file"); p.add_argument("targets", nargs="+")
     a = ap.parse_args(argv)
 
     try:
-        if a.cmd == "report":
+        if a.cmd == "version":
+            print(VERSION)
+        elif a.cmd == "report":
             cmd_report(a)
+            notify(a, load_report(os.path.join(a.outdir, "report.json")))
+        elif a.cmd == "sarif":
+            cmd_sarif(a)
+        elif a.cmd == "baseline":
+            cmd_baseline(a)
         elif a.cmd == "dashboard":
             print(dashboard(load_report(a.json), Term(a.color, a.width)))
         elif a.cmd == "diff":
@@ -1069,6 +1314,10 @@ def main(argv=None):
             else:
                 print(diff_text(d, Term(a.color, 100)))
             changed = any(d[k] for k in d)
+            if getattr(a, "fail_on", None):
+                rank = SEV_RANK[a.fail_on.upper()]
+                severe = any(SEV_RANK.get(x.get("severity", "LOW"), 99) <= rank for x in d["findings_new"])
+                sys.exit(10 if severe else 0)
             sys.exit(10 if (a.fail_on_change and changed) else 0)
         elif a.cmd == "history":
             print(history(a.root, Term(a.color, a.width)))

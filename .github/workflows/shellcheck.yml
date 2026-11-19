@@ -20,3 +20,36 @@ jobs:
         with:
           scandir: .
           severity: warning
+
+  consistency:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Python tooling
+        run: |
+          python -m pip install --quiet ruff mypy bandit
+          ruff check lib/report.py
+          mypy --ignore-missing-imports lib/report.py
+          bandit -q -ll lib/report.py
+      - name: Tests
+        run: make test
+      - name: Generated artifacts
+        run: make option-drift && git diff --exit-code
+      - name: Markdown links
+        run: |
+          python3 - <<'PY'
+          import pathlib, re, sys
+          bad = []
+          for md in pathlib.Path('.').rglob('*.md'):
+              for target in re.findall(r'\[[^]]*\]\(([^)]+)\)', md.read_text(encoding='utf-8')):
+                  if target.startswith(('http://', 'https://', '#', 'mailto:')):
+                      continue
+                  if not (md.parent / target.split('#')[0]).exists():
+                      bad.append(f'{md}: {target}')
+          if bad:
+              print('\n'.join(bad))
+              sys.exit(1)
+          PY

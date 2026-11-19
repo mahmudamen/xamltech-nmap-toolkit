@@ -21,9 +21,28 @@ include exploitation or firewall-evasion features); it hands clean, scoped data 
 ./nmap-toolkit.sh --export hosts latest     > hosts.txt       # live hosts, one per line
 ./nmap-toolkit.sh --export ports latest                       # 22,80,443,... (for -p lists)
 ./nmap-toolkit.sh --export openvas latest                     # comma-separated target string for OpenVAS/Nessus
+python3 lib/report.py export latest/report.json csv-coords    # "host,port" rows for spreadsheets/ticketing
+python3 lib/report.py export latest/report.json json-arm      # ARM-compatible finding summary
+python3 lib/report.py sarif latest -o results.sarif           # SARIF 2.1.0 for code-scanning dashboards
+python3 lib/report.py baseline create latest -b baseline.json # freeze accepted findings
+python3 lib/report.py baseline check newest -b baseline.json  # suppress known findings
 ```
 
 Exports contain only addresses and port numbers taken from the scan - never banner text.
+
+## CI gating and approved plans
+Use a deterministic plan to bind automation to a reviewed scope:
+
+```bash
+./nmap-toolkit.sh -t 10.0.0.0/24 -p audit --dry-run --json > plan.json
+HASH="$(python3 -c 'import json; print(json.load(open("plan.json"))["plan_hash"])')"
+./nmap-toolkit.sh --plan-file plan.json --plan-hash "$HASH" -y
+python3 lib/report.py diff baseline/report.json latest/report.json --fail-on HIGH   # exit 10 on regression
+```
+
+`docs/OPTIONS.md`, the man page and bash/zsh/fish completions are generated from `lib/options.sh`; wire
+`make option-drift` into CI to catch drift. Webhook/email hooks are available on `report.py report`; keep URLs and
+addresses in CI secrets.
 
 ## Typical workflows
 

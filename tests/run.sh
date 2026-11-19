@@ -37,6 +37,12 @@ done
 for good in 192.168.1.0/24 10.0.0.1-5 ::1 localhost 'host-1.example.com' '192.168.1-3.*'; do
     check "accepts target [$good]" "$TK" --no-color --no-banner -o "$TMP/res" -t "$good" -p discovery -y --authorized --dry-run
 done
+out="$(T -t '10.0.0.1 10.0.0.2' -p discovery -y --authorized --dry-run 2>&1)"
+contains "space-separated targets: first"  "$out" "10.0.0.1"
+contains "space-separated targets: second" "$out" "10.0.0.2"
+out="$(T -t 10.0.0.1 -t 10.0.0.2 -p discovery -y --authorized --dry-run 2>&1)"
+contains "repeatable -t: first"  "$out" "10.0.0.1"
+contains "repeatable -t: second" "$out" "10.0.0.2"
 check_not "rejects unknown profile" "$TK" --no-color --no-banner -t 127.0.0.1 -p nope -y
 check_not "rejects bad timing"   "$TK" --no-color --no-banner -o "$TMP/res" -t 127.0.0.1 -p quick -T 9 -y --dry-run
 check_not "rejects bad ports"    "$TK" --no-color --no-banner -o "$TMP/res" -t 127.0.0.1 -p quick --ports '80;id' -y --dry-run
@@ -119,7 +125,141 @@ contains "diff: port opened"   "$d" "2323/tcp"
 contains "diff: port closed"   "$d" "23/tcp"
 check_not "diff --fail-on-change exits non-zero" python3 -I "$RPT" diff "$TMP/rep" "$TMP/rep2" --fail-on-change
 check "diff identical = exit 0" python3 -I "$RPT" diff "$TMP/rep" "$TMP/rep" --fail-on-change
+mkdir -p "$TMP/mix-a" "$TMP/mix-b"
+python3 -I - "$TMP" <<'PY'
+import json, os, sys
+root = sys.argv[1]
+def rep(findings):
+    return {"schema": 1, "generated": "x", "meta": {}, "scan": {"stages": [], "elapsed": 0,
+            "nmap_version": "", "args": ""}, "stats": {"hosts_total": 1, "hosts_up": 1,
+            "open_ports": 1, "services": {}, "findings": {}}, "hosts": [], "prescripts": [],
+            "findings": findings}
+f = [{"severity": "LOW", "host": "same", "port": None, "proto": None, "title": "A",
+      "detail": "", "advice": "", "source": "x"},
+     {"severity": "LOW", "host": "same", "port": 80, "proto": "tcp", "title": "B",
+      "detail": "", "advice": "", "source": "x"}]
+for name, findings in (("mix-a", f), ("mix-b", [])):
+    with open(os.path.join(root, name, "report.json"), "w") as fh:
+        json.dump(rep(findings), fh)
+PY
+check "diff mixed port=None/int findings" python3 -I "$RPT" diff "$TMP/mix-a" "$TMP/mix-b"
+python3 -I "$RPT" diff "$TMP/mix-b" "$TMP/mix-a" --fail-on LOW >/dev/null 2>&1; rc=$?
+[[ $rc -eq 10 ]] && ok "diff --fail-on LOW exits 10" || bad "diff --fail-on LOW rc=$rc"
+python3 -I "$RPT" diff "$TMP/mix-b" "$TMP/mix-a" --fail-on HIGH >/dev/null 2>&1; rc=$?
+[[ $rc -eq 0 ]] && ok "diff --fail-on HIGH stays 0" || bad "diff --fail-on HIGH rc=$rc"
+check "baseline create" python3 -I "$RPT" baseline create "$TMP/mix-a" -b "$TMP/baseline.json"
+check "baseline check" python3 -I "$RPT" baseline check "$TMP/mix-a" -b "$TMP/baseline.json"
 check_not "XML with entities rejected" bash -c "printf '<!DOCTYPE x [<!ENTITY a \"b\">]><nmaprun/>' > '$TMP/ent.xml'; python3 -I '$RPT' report --xml '$TMP/ent.xml' --outdir '$TMP/rep3'"
+
+echo "== compliance"
+plan1="$(T -t 127.0.0.1 -p discovery --dry-run --json)"
+plan2="$(T -t 127.0.0.1 -p discovery --dry-run --json)"
+[[ "$plan1" == "$plan2" ]] && ok "dry-run JSON plan deterministic" || bad "plan drift"
+hash1="$(python3 -c 'import json,sys; print(json.loads(sys.argv[1])["plan_hash"])' "$plan1")"
+python3 -c 'import json,sys; d=json.loads(sys.argv[1]); open(sys.argv[2],"w").write(json.dumps(d))' "$plan1" "$TMP/plan.json"
+check "approved plan accepted" bash -c "'$TK' -t 127.0.0.1 -p discovery --dry-run --plan-file '$TMP/plan.json' --plan-hash '$hash1'"
+check_not "tampered plan rejected" bash -c "'$TK' -t 127.0.0.1 -p discovery --dry-run --plan-file '$TMP/plan.json' --plan-hash deadbeef"
+printf '{"allow":["127.0.0.0/8"],"deny":["127.0.0.1/32"],"max_hosts":2,"valid_from":"2020-01-01T00:00:00Z"}\n' > "$TMP/scope-v2.json"
+python3 -I "$RPT" scope "$TMP/scope-v2.json" 127.0.0.1 >/dev/null 2>&1; rc=$?
+[[ $rc -eq 4 ]] && ok "scope v2 deny exits 4" || bad "scope v2 deny rc=$rc"
+printf '10.0.0.0/8\n' > "$TMP/scope-legacy.txt"
+check "legacy scope still works" python3 -I "$RPT" scope "$TMP/scope-legacy.txt" 10.0.0.1
+
+echo "== presets, groups, history, estimate"
+export XAMLTECH_NMAP_CONFIG_DIR="$TMP/cfg"
+mkdir -p "$XAMLTECH_NMAP_CONFIG_DIR/groups"
+out="$(T -t 127.0.0.1 -p discovery --dry-run --save-preset smoke 2>&1)"
+contains "save preset confirmation" "$out" "Saved preset 'smoke'"
+check "preset file is JSON array" python3 -c "import json,sys; d=json.load(open(sys.argv[1])); assert isinstance(d,list) and '127.0.0.1' in d" "$XAMLTECH_NMAP_CONFIG_DIR/presets/smoke.json"
+out="$(T --preset smoke --dry-run 2>&1)"
+contains "preset round-trip target" "$out" "127.0.0.1"
+[[ ! -e "$XAMLTECH_NMAP_CONFIG_DIR/history.jsonl" ]] && ok "dry-run writes no history" || bad "dry-run wrote history"
+check_not "invalid preset name rejected" "$TK" --no-color --no-banner --preset '../evil' --dry-run
+python3 - "$XAMLTECH_NMAP_CONFIG_DIR/history.jsonl" "$TMP/res" <<'PY'
+import json, sys
+with open(sys.argv[1], "w", encoding="utf-8") as fh:
+    fh.write(json.dumps({"ts": "2026-01-01T00:00:00+00:00",
+                         "argv": ["--no-color", "--no-banner", "-o", sys.argv[2],
+                                  "-t", "127.0.0.1", "-p", "discovery", "--dry-run"]}) + "\n")
+PY
+out="$(T --replay 1 --dry-run 2>&1)"
+contains "history replay target" "$out" "127.0.0.1"
+printf '10.0.0.1\n10.0.0.2\n' > "$XAMLTECH_NMAP_CONFIG_DIR/groups/lab.txt"
+out="$(T --target-group lab -p discovery --dry-run 2>&1)"
+contains "target group first" "$out" "10.0.0.1"
+contains "target group second" "$out" "10.0.0.2"
+mkdir -p "$TMP/estres/20260101_000000_discovery_localhost"
+printf '{"started_epoch": 1767225600}\n' > "$TMP/estres/20260101_000000_discovery_localhost/metadata.json"
+printf '{"generated": "2026-01-01T00:01:40+00:00"}\n' > "$TMP/estres/20260101_000000_discovery_localhost/report.json"
+out="$("$TK" --no-color --no-banner -o "$TMP/estres" -t 127.0.0.1 -p discovery --estimate)"
+contains "estimate stages" "$out" "Workflow stages"
+contains "estimate prior duration" "$out" "Prior duration"
+contains "registry categories exposed" "$(bash -c 'source "$0/lib/options.sh"; options_emit_categories' "$ROOT")" "tuning|TUNING"
+out="$(printf '1\n1\n127.0.0.1\n' | bash -c 'source "$0/lib/options.sh"; source "$0/lib/ui.sh"; source "$0/lib/core.sh"; source "$0/lib/nse.sh"; source "$0/lib/profiles.sh"; source "$0/lib/scan.sh"; source "$0/lib/interactive.sh"; THEME=cyber; ui_init; ui_theme "$THEME"; ui_define_colors; advanced_options_menu' "$ROOT" 2>&1)"
+contains "advanced menu non-TTY fallback" "$out" "Advanced option categories"
+unset XAMLTECH_NMAP_CONFIG_DIR
+
+echo "== profiles and workflows"
+xdg="$TMP/xdg"; mkdir -p "$xdg/xamltech-nmap-toolkit/profiles"
+printf 'extends=standard\nports=80,443\ndesc=Test user profile\n' > "$xdg/xamltech-nmap-toolkit/profiles/myweb.txt"
+out="$(XDG_CONFIG_HOME="$xdg" T -t 127.0.0.1 -p myweb --dry-run -y 2>&1)"
+contains "user profile loaded" "$out" "myweb"
+contains "user profile ports" "$out" '-p80,443'
+contains "user profile description" "$out" "Test user profile"
+check_not "invalid --stage rejected" bash -c "'$TK' --stage bogus --version"
+check_not "resume needs workflow" bash -c "'$TK' --resume '$TMP' --version"
+out="$(T -t 127.0.0.1 -p recon --stage discovery --dry-run -y 2>&1)"
+contains "workflow stage select" "$out" "Workflow: recon"
+printf 'stage|recon|1|bad|discovery|original||||0|nope\n' > "$TMP/bad-stages.txt"
+check_not "malformed stage record rejected" bash -c "XAMLTECH_NMAP_STAGES_FILE='$TMP/bad-stages.txt' source '$ROOT/lib/options.sh'; XAMLTECH_NMAP_STAGES_FILE='$TMP/bad-stages.txt' source '$ROOT/lib/ui.sh'; XAMLTECH_NMAP_STAGES_FILE='$TMP/bad-stages.txt' source '$ROOT/lib/core.sh'; XAMLTECH_NMAP_STAGES_FILE='$TMP/bad-stages.txt' source '$ROOT/lib/nse.sh'; XAMLTECH_NMAP_STAGES_FILE='$TMP/bad-stages.txt' source '$ROOT/lib/profiles.sh'"
+check "stage condition port match" bash -c "source '$ROOT/lib/options.sh'; source '$ROOT/lib/ui.sh'; source '$ROOT/lib/core.sh'; source '$ROOT/lib/nse.sh'; source '$ROOT/lib/profiles.sh'; source '$ROOT/lib/scan.sh'; stage_condition_met 'port in 22,80' '22' 1"
+check_not "stage condition port miss" bash -c "source '$ROOT/lib/options.sh'; source '$ROOT/lib/ui.sh'; source '$ROOT/lib/core.sh'; source '$ROOT/lib/nse.sh'; source '$ROOT/lib/profiles.sh'; source '$ROOT/lib/scan.sh'; stage_condition_met 'port in 22,80' '443' 1"
+python3 - "$TMP/baseline.json" <<'PY'
+import json, sys
+json.dump({"schema_version": 2, "hosts": [{"address": "127.0.0.1", "status": "up",
+    "ports": [{"port": 22, "proto": "tcp", "state": "open", "service": "ssh"}]}], "findings": []},
+    open(sys.argv[1], "w", encoding="utf-8"))
+PY
+out="$(T -t 127.0.0.1 -p discovery --incremental "$TMP/baseline.json" --dry-run 2>&1)"
+contains "incremental skips known targets" "$out" "All targets are already present in the baseline"
+
+echo "== advanced nmap options"
+out="$(T -t 127.0.0.1 -p standard --min-rate 50 --max-parallelism 3 --version-intensity 7 --exclude-ports 9999 --fast-scan --data-length 20 --ttl 64 --mtu 1400 --dry-run -y 2>&1)"
+contains "advanced: --min-rate"        "$out" '--min-rate\ 50'
+contains "advanced: --max-parallelism" "$out" '--max-parallelism\ 3'
+contains "advanced: --version-intensity" "$out" '--version-intensity\ 7'
+contains "advanced: --exclude-ports"   "$out" '--exclude-ports\ 9999'
+contains "advanced: -F"                "$out" '-F'
+contains "advanced: --data-length"     "$out" '--data-length\ 20'
+contains "advanced: --ttl"             "$out" '--ttl\ 64'
+contains "advanced: --mtu"             "$out" '--mtu\ 1400'
+out="$(T -t 127.0.0.1 -p standard -PS80,443 --scanflags 'S|AF' --dry-run -y --ack-risk --explain 2>&1)"
+contains "advanced: -PS probe adapted"  "$out" '-PS80,443 dropped'
+contains "advanced: --scanflags trace"  "$out" '--scanflags S|AF (from --scanflags)'
+contains "explain: override reason"     "$out" 'from --scanflags'
+check_not "invalid --min-rate"         bash -c "'$TK' --min-rate 0 --version"
+check_not "invalid --scanflags hex"    bash -c "'$TK' --scanflags 0x1 --version"
+check_not "invalid --ttl"              bash -c "'$TK' --ttl 999 --version"
+check_not "invalid --mtu"              bash -c "'$TK' --mtu 4 --version"
+check_not "packet-trace needs verbose" bash -c "'$TK' --packet-trace --version"
+check_not "advanced policy needs ack"  bash -c "'$TK' --policy advanced --version"
+check_not "moderate option needs ack"  bash -c "'$TK' --syn-scan --version"
+for bad in '-D 1.2.3.4' '-S 1.2.3.4' '-g 1234' '--proxy http://p:8080' '--badsum' '-f'; do
+    check_not "blocked custom arg [$bad]" bash -c "'$TK' -t 127.0.0.1 -p custom -a '$bad' --dry-run -y --authorized"
+done
+
+echo "== option registry"
+mapfile -t _flags < <(sed -n '/^parse_args()/,/^}/p' "$TK" | tr '|' '\n' | grep -oE -- '^ *--?[0-9A-Za-z][A-Za-z0-9-]*' | tr -d ' ' | sort -u)
+for f in "${_flags[@]}"; do
+    if bash -c "source '$ROOT/lib/options.sh'; option_check_flag '$f'"; then ok "registry covers $f"; else bad "registry missing $f"; fi
+done
+contains "help generated from registry" "$("$TK" --help --no-color)" "--dump-options"
+json="$("$TK" --dump-options 2>/dev/null)"
+check "dump-options is JSON" python3 -I -c "import json,sys; d=json.loads(sys.argv[1]); assert len(d) >= 50" "$json"
+check "completion drift" diff -u "$ROOT/completions/xamltech-nmap.bash" <(bash -c "source '$ROOT/lib/options.sh'; options_emit_completion")
+check "option docs drift" diff -u "$ROOT/docs/OPTIONS.md" <(bash -c "source '$ROOT/lib/options.sh'; options_emit_docs")
+keys="$(bash -c "source '$ROOT/lib/options.sh'; options_emit_config_keys" | paste -sd' ' -)"
+contains "config keys generated" "$keys" "OUTPUT_DIR"
 
 echo "== live integration (localhost, real nmap)"
 if command -v nmap >/dev/null; then
@@ -135,12 +275,21 @@ if command -v nmap >/dev/null; then
     run="$(find "$TMP/res" -mindepth 1 -maxdepth 1 -type d -name '*_odoo_*' | head -1)"
     [[ -n "$run" ]] && ok "dry runs left no directories behind (only the real run exists)" || bad "no odoo run dir"
     [[ "$(find "$TMP/res" -mindepth 1 -maxdepth 1 -type d | wc -l)" -eq 1 ]] && ok "exactly one run dir so far" || bad "stray run dirs from dry-runs"
-    for f in nmap.txt nmap.xml nmap.gnmap metadata.json report.json report.html summary.txt toolkit.log command.txt; do check "run dir has $f" test -s "$run/$f"; done
+    for f in nmap.txt nmap.xml nmap.gnmap metadata.json report.json report.html summary.txt toolkit.log command.txt audit.log; do check "run dir has $f" test -s "$run/$f"; done
+    [[ "$(stat -c %a "$run/audit.log")" == 600 ]] && ok "audit.log is 0600" || bad "audit.log mode $(stat -c %a "$run/audit.log")"
+    contains "report schema_version 2" "$(<"$run/report.json")" '"schema_version": 2'
+    contains "report rule_id" "$(<"$run/report.json")" '"rule_id"'
+    contains "report integrity manifest" "$(<"$run/report.json")" '"native_sha256"'
+    check "sarif export" python3 -I "$RPT" sarif "$run" -o "$TMP/out.sarif"
+    check "sarif valid JSON 2.1.0" python3 -I -c "import json,sys; d=json.load(open('$TMP/out.sarif')); assert d['version']=='2.1.0' and d['runs'][0]['tool']['driver']['name']"
     check "latest symlink" test -L "$TMP/res/latest"
     T -t 127.0.0.1 -p recon --ports "$port" -y >/dev/null 2>&1; sleep 1
     out="$(T -t 127.0.0.1 -p recon --ports "$port" -y 2>&1)"
     contains "workflow: stage 2 found port" "$out" "open ports: $port"
     contains "workflow: previous-run diff"  "$out" "Changes since previous run"
+    latest_run="$(readlink -f "$TMP/res/latest")"
+    contains "HTML findings columns sortable" "$(<"$latest_run/report.html")" 'class="sortable"'
+    contains "HTML side-by-side diff" "$(<"$latest_run/report.html")" 'diffgrid'
     contains "history lists runs" "$(T --history)" "recon"
     out="$(T --export urls latest)"; contains "live export urls" "$out" "http://127.0.0.1:$port"
 else

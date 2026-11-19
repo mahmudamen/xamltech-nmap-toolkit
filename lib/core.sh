@@ -15,6 +15,109 @@ timestamp()      { date '+%Y-%m-%d %H:%M:%S %z'; }
 safe_timestamp() { date '+%Y-%m-%d_%H%M%S'; }
 is_root()        { [[ "${EUID:-$(id -u)}" -eq 0 ]]; }
 
+config_dir() {
+    printf '%s' "${XAMLTECH_NMAP_CONFIG_DIR:-${XDG_CONFIG_HOME:-$HOME/.config}/xamltech-nmap-toolkit}"
+}
+preset_path()    { printf '%s/presets/%s.json' "$(config_dir)" "$1"; }
+group_path()     { printf '%s/groups/%s.txt' "$(config_dir)" "$1"; }
+history_path()   { printf '%s/history.jsonl' "$(config_dir)"; }
+
+STORAGE_ARGV=()
+
+save_preset() {
+    local name="$1" dir path
+    command_exists python3 || die "python3 is required for presets."
+    shift
+    dir="$(config_dir)/presets"
+    mkdir -p "$dir"
+    path="$(preset_path "$name")"
+    python3 - "$path" "$@" <<'PY'
+import json, os, sys, tempfile
+path, argv = sys.argv[1], sys.argv[2:]
+fd, tmp = tempfile.mkstemp(prefix=".preset.", dir=os.path.dirname(path))
+with os.fdopen(fd, "w", encoding="utf-8") as fh:
+    json.dump(argv, fh)
+    fh.write("\n")
+os.chmod(tmp, 0o600)
+os.replace(tmp, path)
+PY
+}
+
+load_preset() {
+    local path
+    command_exists python3 || die "python3 is required for presets."
+    STORAGE_ARGV=()
+    path="$(preset_path "$1")"
+    [[ -r "$path" ]] || die "Unknown preset: $1"
+    mapfile -t STORAGE_ARGV < <(python3 - "$path" <<'PY'
+import json, sys
+with open(sys.argv[1], encoding="utf-8") as fh:
+    argv = json.load(fh)
+if not isinstance(argv, list):
+    raise SystemExit("Invalid preset file")
+for token in argv:
+    print(token)
+PY
+    )
+}
+
+expand_target_group() {
+    local path line
+    path="$(group_path "$1")"
+    [[ -r "$path" ]] || die "Unknown target group: $1"
+    while IFS= read -r line || [[ -n "$line" ]]; do
+        line="${line%%#*}"
+        line="${line#"${line%%[![:space:]]*}"}"
+        line="${line%"${line##*[![:space:]]}"}"
+        [[ -z "$line" ]] && continue
+        append_targets "$line"
+    done < "$path"
+}
+
+append_history() {
+    local dir path
+    command_exists python3 || return 0
+    dir="$(config_dir)"
+    mkdir -p "$dir"
+    path="$(history_path)"
+    python3 - "$path" "$(date -Iseconds)" "$@" <<'PY'
+import json, os, sys
+path, ts, argv = sys.argv[1], sys.argv[2], sys.argv[3:]
+with open(path, "a", encoding="utf-8") as fh:
+    fh.write(json.dumps({"ts": ts, "argv": argv}) + "\n")
+os.chmod(path, 0o600)
+PY
+}
+
+load_history_entry() {
+    local path index="$1"
+    command_exists python3 || die "python3 is required for history replay."
+    STORAGE_ARGV=()
+    path="$(history_path)"
+    [[ -r "$path" ]] || die "No command history found"
+    mapfile -t STORAGE_ARGV < <(python3 - "$path" "$index" <<'PY'
+import json, sys
+with open(sys.argv[1], encoding="utf-8") as fh:
+    lines = [line for line in fh if line.strip()]
+idx = int(sys.argv[2])
+if idx < 1 or idx > len(lines):
+    raise SystemExit(f"Unknown history entry: {idx}")
+argv = json.loads(lines[-idx]).get("argv", [])
+clean, skip = [], False
+for token in argv:
+    if skip:
+        skip = False
+        continue
+    if token == "--replay":
+        skip = True
+        continue
+    clean.append(token)
+for token in clean:
+    print(token)
+PY
+    )
+}
+
 # ---------- logging ----------
 
 log_init() {
@@ -45,8 +148,7 @@ split_args() {
 
 # ---------- config (key=value, whitelist, never sourced) ----------
 
-CONFIG_KEYS=(OUTPUT_DIR DEFAULT_PROFILE TIMING THEME REPORT_FORMATS SCOPE_FILE PING_LATENCY
-             COLOR_MODE DNS_SERVERS MAX_RATE HOST_TIMEOUT OPEN_REPORT NOTIFY MAX_RETRIES)
+CONFIG_KEYS=($(options_emit_config_keys))
 
 load_config() {
     local file="$1" line key val k ok_key lineno=0
@@ -95,7 +197,18 @@ detect_nmap() {
     detect_privileges
 }
 
-nmap_version() { "$NMAP_BIN" --version 2>/dev/null | awk 'NR==1 {print $3}'; }
+NMAP_VERSION_CACHE=""
+nmap_version() {
+    [[ -n "$NMAP_VERSION_CACHE" ]] && { printf '%s' "$NMAP_VERSION_CACHE"; return 0; }
+    NMAP_VERSION_CACHE="$("$NMAP_BIN" --version 2>/dev/null | awk 'NR==1 {print $3}')"
+    printf '%s' "$NMAP_VERSION_CACHE"
+}
+
+script_updatedb() {
+    detect_nmap
+    info "Updating the local NSE script database..."
+    "$NMAP_BIN" --script-updatedb
+}
 
 nmap_datadir() {
     local d
@@ -247,15 +360,20 @@ validate_target_token() {
     (( ${#t} <= 253 )) || die "Target is too long."
 }
 
-# set_targets "a b c"   (whitespace separated)
-set_targets() {
+# append_targets "a b c"   (whitespace separated, keeps existing targets)
+append_targets() {
     local t IFS=$' \t\n'
-    TARGETS=()
     for t in $1; do
         validate_target_token "$t"
         TARGETS+=("$t")
     done
     [[ ${#TARGETS[@]} -gt 0 ]] || die "Target cannot be empty."
+}
+
+# set_targets "a b c"   (whitespace separated, replaces existing targets)
+set_targets() {
+    TARGETS=()
+    append_targets "$1"
 }
 
 load_targets_file() {
@@ -336,6 +454,31 @@ authorization_gate() {
     DIE_CODE=4 die "Non-private target. Re-run with --authorized to confirm you have permission."
 }
 
+enforce_policy() {
+    local rec canon
+    for rec in "${OPTION_TABLE[@]}"; do
+        _option_parse "$rec"
+        canon="$(opt_canonical "$OPT_FLAG")"
+        [[ -n "${OVERRIDE_VALUES[$canon]+x}" ]] || continue
+        [[ "$OPT_CATEGORY" == nmap && "$OPT_RISK" == moderate ]] || continue
+        (( ACK_RISK )) || DIE_CODE=4 die "$canon is moderate risk; re-run with --ack-risk."
+    done
+    if [[ "${POLICY:-strict}" != strict ]] && (( ! ACK_RISK )); then
+        DIE_CODE=4 die "--policy advanced requires --ack-risk."
+    fi
+}
+
+audit_log() {
+    local rc="$1" cmd="${2:-}" plan="${3:-}" commit operator sudo_user safe
+    [[ -n "${RUN_DIR:-}" && -d "${RUN_DIR:-}" ]] || return 0
+    operator="${USER:-unknown}"; sudo_user="${SUDO_USER:--}"
+    commit="$(git -C "${TOOLKIT_HOME:-.}" rev-parse --short HEAD 2>/dev/null || printf 'unknown')"
+    safe="$(printf '%s' "$cmd" | tr '\n\r\t' '   ' | sed -e 's/\\/\\\\/g' -e 's/"/\\"/g')"
+    printf '{"ts":"%s","operator":"%s","sudo_user":"%s","commit":"%s","plan_hash":"%s","command":"%s","rc":%s}\n' \
+        "$(date -Iseconds)" "$operator" "$sudo_user" "$commit" "$plan" "$safe" "$rc" >> "$RUN_DIR/audit.log"
+    chmod 600 "$RUN_DIR/audit.log" 2>/dev/null || true
+}
+
 # ---------- guard rails for custom arguments ----------
 
 # The toolkit manages output files and refuses offensive NSE categories.
@@ -349,7 +492,12 @@ guard_custom_args() {
             -oN|-oX|-oG|-oA|-oS|-oJ|--resume|--append-output|--stylesheet|--webxml|--datadir|--script-updatedb)
                 die "Option '$a' is managed by the toolkit and cannot be passed through." ;;
             -o[NXGASJ]*) die "Output option '$a' is managed by the toolkit." ;;
+            -D|--decoy|-S|--spoof-source|-g|--proxy|--proxies|--badsum|-f|-ff|--fragment|--spoof-mac|--ip-options|--source-port)
+                DIE_CODE=4 die "Blocked option '$a': spoofing, decoys, proxies, fragmentation and badsum are not allowed." ;;
         esac
+        if [[ "$a" == -D* || "$a" == --decoy=* || "$a" == -g* || "$a" == --proxy=* ]]; then
+            DIE_CODE=4 die "Blocked option '$a': spoofing, decoys and proxies are not allowed."
+        fi
         if [[ "$a" == --script=* || "$a" == "--script" ]]; then
             if [[ "$a" == --script=* ]]; then next="${a#--script=}"; else next="${arr[i+1]:-}"; fi
             guard_script_spec "$next"
@@ -375,9 +523,10 @@ adapt_args_for_privileges() {
     for a in "${NMAP_ARGS[@]}"; do
         case "$a" in
             -sS|-sA|-sW|-sM|-sF|-sN|-sX) out+=("-sT"); ADAPT_NOTES+=("$a -> -sT (raw sockets unavailable)") ;;
-            -sU) ADAPT_NOTES+=("-sU dropped (UDP scan needs root)") ;;
+            -sU|-sO|-sY|-sZ|--scanflags) ADAPT_NOTES+=("$a dropped (scan type needs raw sockets)") ;;
             -O|--osscan-limit|--osscan-guess|--fuzzy) ADAPT_NOTES+=("$a dropped (OS detection needs root)") ;;
-            -PE|-PP|-PM|-PR|-PO*|--traceroute) ADAPT_NOTES+=("$a dropped (needs raw sockets)") ;;
+            -PE|-PP|-PM|-PR|-PO*|-PS*|-PA*|-PU*|-PY*|--traceroute|--send-ip|--send-eth)
+                ADAPT_NOTES+=("$a dropped (needs raw sockets)") ;;
             *) out+=("$a") ;;
         esac
     done

@@ -14,7 +14,7 @@ set -Eeuo pipefail
 IFS=$'\n\t'
 
 readonly SCRIPT_NAME="xamltech-nmap-toolkit"
-readonly SCRIPT_VERSION="2.0.0"
+SCRIPT_VERSION=""
 readonly AUTHOR="Mahmoud Mohamed Amin"
 readonly GITHUB_USER="mahmudamen"
 readonly WEBSITE="https://xamltech.com"
@@ -24,9 +24,11 @@ TOOLKIT_HOME="${XAMLTECH_NMAP_HOME:-$(dirname "$SCRIPT_PATH")}"
 LIB_DIR="$TOOLKIT_HOME/lib"
 SCRIPTS_DIR="$TOOLKIT_HOME/scripts"
 readonly SCRIPT_PATH TOOLKIT_HOME LIB_DIR SCRIPTS_DIR
+SCRIPT_VERSION="$(python3 -I "$LIB_DIR/report.py" version 2>/dev/null || printf '2.1.0')"
+readonly SCRIPT_VERSION
 ORIGINAL_ARGS=("$@")
 
-for _lib in ui core nse profiles scan interactive; do
+for _lib in options ui core nse profiles scan interactive; do
     [[ -r "$LIB_DIR/$_lib.sh" ]] || { echo "xamltech-nmap-toolkit: missing $LIB_DIR/$_lib.sh" >&2; exit 3; }
     # shellcheck source=/dev/null
     source "$LIB_DIR/$_lib.sh"
@@ -52,6 +54,17 @@ TARGET_CLASS=""
 CONFIG_FILE=""
 DEFAULT_PROFILE="standard"
 INTERACTIVE_SESSION=0
+POLICY="strict"
+ACK_RISK=0
+EXPLAIN=0
+STAGE=""
+RESUME_DIR=""
+INCREMENTAL_BASELINE=""
+JSON_PLAN=0
+PLAN_FILE=""
+PLAN_HASH_EXPECTED=""
+PLAN_JSON=""
+PLAN_HASH=""
 
 # ---------- help ----------
 
@@ -64,59 +77,15 @@ ${C_ACCENT}${C_BOLD}USAGE${C_RESET}
   $(basename "$0") [OPTIONS]                      interactive menu
   $(basename "$0") -t TARGET -p PROFILE [OPTIONS] scan directly
 
-${C_ACCENT}${C_BOLD}TARGETS${C_RESET}
-  -t, --target TARGET       Host, hostname, CIDR, range (192.168.1.1-254); repeatable / space separated
-  -L, --target-file FILE    Read targets from file (one per line, # comments)
-      --exclude LIST        Exclude hosts/networks
-      --scope FILE          Authorized scope file; refuse anything outside it
-
-${C_ACCENT}${C_BOLD}PROFILES${C_RESET}
-  -p, --profile NAME        See --list-profiles (${#PROFILE_TABLE[@]} profiles + recon/inventory workflows)
-  -a, --args "ARGS"         Arguments for the 'custom' profile (quote-aware)
-
-${C_ACCENT}${C_BOLD}TUNING${C_RESET}
-  -T, --timing 0-5          Nmap timing template        --ports SPEC        e.g. 22,80,443 or T:22,U:53
-      --top-ports N         Most common N ports         --scripts LIST      Extra NSE scripts (names/paths)
-      --script-args K=V     NSE script arguments        --max-rate N        Max packets/second
-      --max-retries N       Probe retransmissions       --host-timeout 5m   Give up on slow hosts
-      --dns-servers LIST    Custom resolvers            -e, --interface IF  Network interface
-      --no-ping, -Pn        Treat hosts as up           --no-dns, -n        Skip DNS resolution
-  -6, --ipv6                IPv6 scanning
-
-${C_ACCENT}${C_BOLD}OUTPUT${C_RESET}
-  -o, --output DIR          Result directory (default: ./results)
-      --formats LIST        json,csv,md,html (default: all)
-      --open                Open the HTML report when done
-      --notify              Terminal bell / desktop notification when done
-      --no-latency          Skip the parallel ping latency table
-      --theme NAME          cyber ocean sunset matrix aurora mono
-      --no-color, --color   Force colors off/on        --no-banner   Hide the headline
-
-${C_ACCENT}${C_BOLD}SAFETY${C_RESET}
-      --authorized          Confirm authorization for non-private targets (required in non-interactive mode)
-      --dry-run             Show the plan and exact Nmap command, run nothing
-      --sudo                Re-run this toolkit through sudo (raw-socket scans)
-  -y, --yes                 Skip confirmation prompts
-
-${C_ACCENT}${C_BOLD}TOOLS${C_RESET}
-      --list-profiles       Show every profile with risk/root/speed
-      --list-scripts [F]    Browse local NSE scripts (filter by name/category)
-      --script-help NAME    Show NSE script documentation
-      --history             List previous runs
-      --diff A B            Compare two runs (dir name, path or 'latest')
-      --open-report [RUN]   Open an HTML report (default: latest)
-      --export KIND [RUN]   Handoff list: urls | hostports | hosts | ports | openvas
-                            (feed ZAP/Burp, Masscan, OpenVAS/Nessus - see docs/INTEGRATIONS.md)
-      --doctor              Check your environment
-      --check-updates       Nmap version information (add --online to query nmap.org)
-      --config FILE         Load an extra config file
-  -v, --verbose             Debug output        --version   Print version     -h, --help   This help
+EOF
+    options_emit_help
+    cat <<EOF
 
 ${C_ACCENT}${C_BOLD}EXAMPLES${C_RESET}
   $(basename "$0")                                              ${C_GRAY}# guided menu${C_RESET}
   $(basename "$0") -t 192.168.1.0/24 -p discovery
-  $(basename "$0") -t 192.168.1.0/24 -p recon                    ${C_GRAY}# discover -> ports -> services${C_RESET}
-  $(basename "$0") -t erp.lan -p odoo --open                     ${C_GRAY}# Odoo exposure review${C_RESET}
+  $(basename "$0") -t 192.168.1.0/24 -p recon              ${C_GRAY}# staged discovery${C_RESET}
+  $(basename "$0") -t erp.lan -p odoo --open               ${C_GRAY}# Odoo exposure review${C_RESET}
   $(basename "$0") -t 10.0.0.5 -p tls --ports 443,8443
   $(basename "$0") -t 10.0.0.0/24 -p audit --scope scope.txt --sudo
   $(basename "$0") -t 192.168.1.1 -p custom -a "-sV --top-ports 100"
@@ -130,11 +99,56 @@ EOF
 
 need_val() { [[ $2 -ge 2 ]] || die "Missing value for $1"; }
 
+build_plan_json() {
+    python3 - "$SCRIPT_VERSION" "$PROFILE" "$POLICY" "$TIMING" "$PORTS" \
+        "${REPORT_FORMATS:-}" "${SCOPE_FILE:-}" "${TARGETS[@]}" <<'PY'
+import hashlib, json, sys
+(version, profile, policy, timing, ports, formats, scope, *targets) = sys.argv[1:]
+plan = {"tool": "xamltech-nmap-toolkit", "version": version, "profile": profile,
+        "policy": policy, "timing": timing, "ports": ports,
+        "formats": [x for x in formats.split(",") if x], "scope": scope,
+        "targets": sorted(targets)}
+print(json.dumps(plan, sort_keys=True, separators=(",", ":")))
+PY
+}
+
+plan_hash_file() {
+    python3 - "$1" <<'PY'
+import hashlib, json, sys
+with open(sys.argv[1], encoding="utf-8") as fh:
+    data = json.load(fh)
+data.pop("plan_hash", None)
+if "plan" in data and isinstance(data["plan"], dict):
+    data = data["plan"]
+print(hashlib.sha256(json.dumps(data, sort_keys=True, separators=(",", ":")).encode()).hexdigest())
+PY
+}
+
 parse_args() {
-    local t
     while [[ $# -gt 0 ]]; do
+        if [[ "$1" != "--" ]]; then
+            option_check_flag "$1" || DIE_CODE=2 die "Unknown option: $1. Use --help."
+            local val vkind attached=""
+            val="$(option_lookup "$1" validator || true)"
+            vkind="$(option_lookup "$1" value || true)"
+            attached="$(opt_attached_value "$1" || true)"
+            if [[ -n "$attached" ]]; then
+                [[ -z "$val" ]] || option_validate "$1" "$attached"
+                opt_store_override "$1" "$attached"
+                [[ "$(option_lookup "$1" canonical)" != --timing ]] || TIMING="$attached"
+            else
+                if [[ -n "$val" && "$vkind" != none && $# -ge 2 && "${2:-}" != -* ]]; then
+                    option_validate "$1" "$2"
+                fi
+                if [[ "$vkind" != none && $# -ge 2 && "${2:-}" != -* ]]; then
+                    opt_store_override "$1" "$2"
+                else
+                    opt_store_override "$1"
+                fi
+            fi
+        fi
         case "$1" in
-            -t|--target)      need_val "$1" $#; for t in $2; do validate_target_token "$t"; TARGETS+=("$t"); done; shift 2 ;;
+            -t|--target)      need_val "$1" $#; append_targets "$2"; shift 2 ;;
             -L|--target-file) need_val "$1" $#; load_targets_file "$2"; shift 2 ;;
             -p|--profile)     need_val "$1" $#; PROFILE="$2"; shift 2 ;;
             -o|--output)      need_val "$1" $#; OUTPUT_DIR="$2"; shift 2 ;;
@@ -164,6 +178,9 @@ parse_args() {
             --color)          COLOR_MODE=always; shift ;;
             --no-banner)      NO_BANNER=1; shift ;;
             --authorized)     AUTHORIZED=1; shift ;;
+            --json)           JSON_PLAN=1; shift ;;
+            --plan-file)      need_val "$1" $#; PLAN_FILE="$2"; shift 2 ;;
+            --plan-hash)      need_val "$1" $#; PLAN_HASH_EXPECTED="$2"; shift 2 ;;
             --dry-run)        DRY_RUN=1; shift ;;
             --sudo)           USE_SUDO=1; shift ;;
             --online)         ONLINE_CHECK=1; shift ;;
@@ -183,10 +200,34 @@ parse_args() {
                               if [[ $# -gt 0 && "$1" != -* ]]; then ACTION_ARG2="$1"; shift; fi ;;
             --doctor)         ACTION=doctor; shift ;;
             --check-updates)  ACTION=check-updates; shift ;;
+            --policy)         need_val "$1" $#; POLICY="$2"; shift 2 ;;
+            --ack-risk)       ACK_RISK=1; shift ;;
+            --explain)        EXPLAIN=1; shift ;;
+            --dump-options)   ACTION=dump-options; shift ;;
+            --script-updatedb) ACTION=script-updatedb; shift ;;
+            --stage)          need_val "$1" $#; STAGE="$2"; shift 2 ;;
+            --resume)         need_val "$1" $#; RESUME_DIR="$2"; shift 2 ;;
+            --incremental)    need_val "$1" $#; INCREMENTAL_BASELINE="$2"; shift 2 ;;
+            --target-group)   need_val "$1" $#; shift 2 ;;
+            --save-preset)    need_val "$1" $#; shift 2 ;;
+            --preset)         need_val "$1" $#; shift 2 ;;
+            --replay)         need_val "$1" $#; shift 2 ;;
+            --estimate)       ACTION=estimate; shift ;;
             --version)        ACTION=version; shift ;;
             -h|--help)        ACTION=help; shift ;;
             --)               shift; CUSTOM_ARGS=("$@"); break ;;
-            *)                DIE_CODE=2 die "Unknown option: $1. Use --help." ;;
+            *)
+                if option_check_flag "$1"; then
+                    if [[ -n "$(opt_attached_value "$1" || true)" ]]; then
+                        shift
+                    elif [[ "$(option_lookup "$1" value)" != none && $# -ge 2 && "${2:-}" != -* ]]; then
+                        shift 2
+                    else
+                        shift
+                    fi
+                else
+                    DIE_CODE=2 die "Unknown option: $1. Use --help."
+                fi ;;
         esac
     done
 }
@@ -217,17 +258,16 @@ on_interrupt() {
 # ---------- main ----------
 
 main() {
-    ui_init
     trap on_exit EXIT
     trap on_interrupt INT TERM
-    require_basic_tools
 
     # config files: system, user, project, then --config
     local cfg i
     for cfg in /etc/xamltech-nmap-toolkit.conf "${XDG_CONFIG_HOME:-$HOME/.config}/xamltech-nmap-toolkit/config" ./.xamltech-nmap.conf; do
         load_config "$cfg"
     done
-    local -a argv=("$@")
+    local -a argv=("$@") expanded=()
+    local preset_depth=0 group_name save_name
     for (( i = 0; i < ${#argv[@]}; i++ )); do
         if [[ "${argv[i]}" == --config ]]; then
             [[ -n "${argv[i+1]:-}" ]] || die "Missing value for --config"
@@ -236,8 +276,91 @@ main() {
             load_config "$CONFIG_FILE"
         fi
     done
+    while :; do
+        expanded=()
+        local found=0
+        for (( i = 0; i < ${#argv[@]}; i++ )); do
+            if [[ "${argv[i]}" == --preset ]]; then
+                [[ -n "${argv[i+1]:-}" ]] || die "Missing value for --preset"
+                preset_depth=$(( preset_depth + 1 ))
+                (( preset_depth <= 10 )) || die "Preset expansion too deep"
+                load_preset "${argv[i+1]}"
+                (( i == 0 )) || expanded+=("${argv[@]:0:i}")
+                expanded+=("${STORAGE_ARGV[@]}")
+                (( i + 1 >= ${#argv[@]} )) || expanded+=("${argv[@]:i+2}")
+                argv=("${expanded[@]}")
+                found=1
+                break
+            fi
+        done
+        (( found )) || break
+    done
+    for (( i = 0; i < ${#argv[@]}; i++ )); do
+        if [[ "${argv[i]}" == --replay ]]; then
+            [[ -n "${argv[i+1]:-}" ]] || die "Missing value for --replay"
+            load_history_entry "${argv[i+1]}"
+            argv=("${STORAGE_ARGV[@]}")
+            break
+        fi
+    done
+    expanded=()
+    for (( i = 0; i < ${#argv[@]}; i++ )); do
+        if [[ "${argv[i]}" == --target-group ]]; then
+            [[ -n "${argv[i+1]:-}" ]] || die "Missing value for --target-group"
+            group_name="${argv[i+1]}"
+            option_validate --target-group "$group_name"
+            expand_target_group "$group_name"
+            i=$(( i + 1 ))
+        else
+            expanded+=("${argv[i]}")
+        fi
+    done
+    argv=("${expanded[@]}")
+    expanded=()
+    for (( i = 0; i < ${#argv[@]}; i++ )); do
+        if [[ "${argv[i]}" == --save-preset ]]; then
+            [[ -n "${argv[i+1]:-}" ]] || die "Missing value for --save-preset"
+            save_name="${argv[i+1]}"
+            option_validate --save-preset "$save_name"
+            i=$(( i + 1 ))
+        else
+            expanded+=("${argv[i]}")
+        fi
+    done
+    argv=("${expanded[@]}")
+    [[ -z "${save_name:-}" ]] || { save_preset "$save_name" "${argv[@]}"; info "Saved preset '$save_name'."; }
 
-    parse_args "$@"
+    parse_args "${argv[@]}"
+    if [[ -n "${OVERRIDE_VALUES[--packet-trace]+x}" ]] && (( ! VERBOSE )); then
+        DIE_CODE=2 die "--packet-trace requires --verbose."
+    fi
+    enforce_policy
+    [[ -z "$STAGE" || "$STAGE" == discovery || "$STAGE" == ports || "$STAGE" == services ]] \
+        || DIE_CODE=2 die "--stage must be discovery, ports or services."
+    [[ -z "$RESUME_DIR" ]] || workflow_exists "$PROFILE" \
+        || DIE_CODE=2 die "--resume requires a workflow profile."
+    [[ -z "$INCREMENTAL_BASELINE" || -r "$INCREMENTAL_BASELINE" ]] \
+        || DIE_CODE=2 die "Cannot read baseline report: $INCREMENTAL_BASELINE"
+    PLAN_JSON=""
+    PLAN_HASH=""
+    if (( JSON_PLAN )) || [[ -n "$PLAN_FILE" ]]; then
+        command_exists python3 || DIE_CODE=3 die "python3 is required for JSON plans."
+        PLAN_JSON="$(build_plan_json)"
+        PLAN_HASH="$(python3 -c 'import hashlib,sys; print(hashlib.sha256(sys.argv[1].encode()).hexdigest())' "$PLAN_JSON")"
+    fi
+    if [[ -n "$PLAN_FILE" ]]; then
+        [[ -r "$PLAN_FILE" ]] || DIE_CODE=4 die "Cannot read plan file: $PLAN_FILE"
+        [[ -n "$PLAN_HASH_EXPECTED" ]] || DIE_CODE=4 die "--plan-file requires --plan-hash."
+        local actual
+        actual="$(plan_hash_file "$PLAN_FILE")" || DIE_CODE=4 die "Invalid plan file."
+        [[ "$actual" == "$PLAN_HASH_EXPECTED" ]] || DIE_CODE=4 die "Plan hash mismatch."
+        info "Approved plan verified ($actual)."
+    fi
+    if (( DRY_RUN && JSON_PLAN )); then
+        printf '{"plan":%s,"plan_hash":"%s"}\n' "$PLAN_JSON" "$PLAN_HASH"
+        return 0
+    fi
+    require_basic_tools
     ui_init
     ui_theme "$THEME" || die "Unknown theme '$THEME' (use: $(ui_themes | paste -sd' '))"
     ui_define_colors
@@ -245,12 +368,15 @@ main() {
     case "$ACTION" in
         version)       printf '%s %s\n' "$SCRIPT_NAME" "$SCRIPT_VERSION"; return 0 ;;
         help)          usage; return 0 ;;
+        dump-options)  options_emit_json; return 0 ;;
+        script-updatedb) script_updatedb; return 0 ;;
         list-profiles) list_profiles; return 0 ;;
         history)       show_history; return 0 ;;
         diff)          diff_runs "$ACTION_ARG1" "$ACTION_ARG2"; return 0 ;;
         export)        export_run "$ACTION_ARG1" "${ACTION_ARG2:-latest}"; return 0 ;;
         open-report)   open_report "${ACTION_ARG1:-latest}"; return 0 ;;
         doctor)        (( NO_BANNER )) || banner; doctor; return 0 ;;
+        estimate)      (( NO_BANNER )) || banner; estimate_plan; return 0 ;;
     esac
 
     detect_nmap
@@ -279,6 +405,7 @@ main() {
     env_line
     enforce_scope
     authorization_gate || return 0
+    (( DRY_RUN )) || append_history "${argv[@]}"
     run_scan
 }
 

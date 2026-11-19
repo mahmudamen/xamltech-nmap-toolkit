@@ -1,0 +1,8 @@
+# Declarative workflow stages. Fields:
+# stage|pipeline|index|name|profile|targets|when|ports|scripts|timeout|on_fail
+stage|recon|1|discovery|discovery|original||||0|abort
+stage|recon|2|ports|quick|hosts-up|host_count > 0|||0|abort
+stage|recon|3|services|default|hosts-open||||0|abort
+stage|inventory|1|discovery|discovery|original||||0|abort
+stage|inventory|2|ports|quick|hosts-up|host_count > 0|||0|abort
+stage|inventory|3|services|default|hosts-open||||0|abort

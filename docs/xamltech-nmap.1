@@ -1,0 +1,365 @@
+.TH XAMLTECH-NMAP 1 "2026-01-01" "xamltech-nmap-toolkit" "User Commands"
+.SH NAME
+xamltech-nmap \- authorized network discovery and diagnostics
+.SH SYNOPSIS
+.B xamltech-nmap
+[OPTIONS]
+.SH DESCRIPTION
+Generated from lib/options.sh by `make docs`. Do not edit by hand.
+.SH OPTIONS
+.TP
+\fB--target\fR, \fB-t\fR
+Host, hostname, CIDR or range; repeatable
+.TP
+\fB--target-file\fR, \fB-L\fR
+Read targets from file (one per line)
+.TP
+\fB--exclude\fR
+Exclude hosts or networks
+.TP
+\fB--scope\fR
+Authorized scope file; refuse targets outside it
+.TP
+\fB--stage\fR
+Run one workflow stage (discovery|ports|services)
+.TP
+\fB--resume\fR
+Resume a workflow from an existing run directory
+.TP
+\fB--incremental\fR
+Scan only hosts/ports absent from a baseline report
+.TP
+\fB--target-group\fR
+Expand a named target group
+.TP
+\fB--save-preset\fR
+Save current options as a named JSON preset
+.TP
+\fB--preset\fR
+Load options from a named JSON preset
+.TP
+\fB--replay\fR
+Replay a numbered command from history
+.TP
+\fB--estimate\fR
+Estimate hosts, stages and duration
+.TP
+\fB--profile\fR, \fB-p\fR
+Scan profile name
+.TP
+\fB--args\fR, \fB-a\fR
+Quote-aware arguments for the custom profile
+.TP
+\fB--timing\fR, \fB-T\fR
+Nmap timing template 0-5
+.TP
+\fB--ports\fR
+Port specification, e.g. 22,80,443 or T:22,U:53
+.TP
+\fB--top-ports\fR
+Scan the N most common ports
+.TP
+\fB--max-rate\fR
+Maximum packets per second
+.TP
+\fB--max-retries\fR
+Probe retransmissions
+.TP
+\fB--host-timeout\fR
+Give up on slow hosts
+.TP
+\fB--dns-servers\fR
+Custom resolvers
+.TP
+\fB--interface\fR, \fB-e\fR
+Network interface
+.TP
+\fB--scripts\fR
+Extra NSE scripts (validated)
+.TP
+\fB--script-args\fR
+NSE script arguments
+.TP
+\fB--output\fR, \fB-o\fR
+Result directory
+.TP
+\fB--formats\fR
+Report formats
+.TP
+\fB--theme\fR
+Color theme
+.TP
+\fB--no-latency\fR
+Skip the parallel ping latency table
+.TP
+\fB--open\fR
+Open the HTML report when done
+.TP
+\fB--notify\fR
+Bell or desktop notification when done
+.TP
+\fB--no-color\fR
+Force colors off
+.TP
+\fB--color\fR
+Force colors on
+.TP
+\fB--no-banner\fR
+Hide the headline
+.TP
+\fB--authorized\fR
+Confirm authorization for non-private targets
+.TP
+\fB--json\fR
+Emit the dry-run plan as deterministic JSON
+.TP
+\fB--plan-file\fR
+Require an approved JSON scan plan
+.TP
+\fB--plan-hash\fR
+SHA-256 hash of the approved plan
+.TP
+\fB--dry-run\fR
+Show the plan and exact command, run nothing
+.TP
+\fB--sudo\fR
+Re-run the toolkit through sudo
+.TP
+\fB--yes\fR, \fB-y\fR
+Skip confirmation prompts
+.TP
+\fB--no-ping\fR, \fB-Pn\fR
+Treat hosts as up
+.TP
+\fB--no-dns\fR, \fB-n\fR
+Skip DNS resolution
+.TP
+\fB--ipv6\fR, \fB-6\fR
+IPv6 scanning
+.TP
+\fB--policy\fR
+strict or advanced (requires --ack-risk)
+.TP
+\fB--ack-risk\fR
+Acknowledge advanced policy risks
+.TP
+\fB--tcp-syn-probe\fR, \fB-PS\fR
+TCP SYN discovery probe ports
+.TP
+\fB--tcp-ack-probe\fR, \fB-PA\fR
+TCP ACK discovery probe ports
+.TP
+\fB--udp-probe\fR, \fB-PU\fR
+UDP discovery probe ports
+.TP
+\fB--sctp-probe\fR, \fB-PY\fR
+SCTP discovery probe ports
+.TP
+\fB--icmp-echo\fR, \fB-PE\fR
+ICMP echo discovery
+.TP
+\fB--icmp-timestamp\fR, \fB-PP\fR
+ICMP timestamp discovery
+.TP
+\fB--icmp-netmask\fR, \fB-PM\fR
+ICMP netmask discovery
+.TP
+\fB--ip-proto-ping\fR, \fB-PO\fR
+IP protocol ping
+.TP
+\fB--arp-ping\fR, \fB-PR\fR
+ARP discovery (local network)
+.TP
+\fB--disable-arp-ping\fR
+Skip ARP discovery
+.TP
+\fB--send-ip\fR
+Send raw IP packets
+.TP
+\fB--send-eth\fR
+Send raw Ethernet frames
+.TP
+\fB--connect-scan\fR, \fB-sT\fR
+TCP connect scan
+.TP
+\fB--syn-scan\fR, \fB-sS\fR
+TCP SYN scan
+.TP
+\fB--ack-scan\fR, \fB-sA\fR
+TCP ACK scan
+.TP
+\fB--window-scan\fR, \fB-sW\fR
+TCP window scan
+.TP
+\fB--maimon-scan\fR, \fB-sM\fR
+TCP Maimon scan
+.TP
+\fB--fin-scan\fR, \fB-sF\fR
+TCP FIN scan
+.TP
+\fB--null-scan\fR, \fB-sN\fR
+TCP NULL scan
+.TP
+\fB--xmas-scan\fR, \fB-sX\fR
+TCP XMAS scan
+.TP
+\fB--udp-scan\fR, \fB-sU\fR
+UDP scan
+.TP
+\fB--ip-proto-scan\fR, \fB-sO\fR
+IP protocol scan
+.TP
+\fB--sctp-init-scan\fR, \fB-sY\fR
+SCTP INIT scan
+.TP
+\fB--sctp-cookie-scan\fR, \fB-sZ\fR
+SCTP COOKIE-ECHO scan
+.TP
+\fB--scanflags\fR
+Custom TCP flag set (no raw hex)
+.TP
+\fB--min-rate\fR
+Minimum packets per second
+.TP
+\fB--min-parallelism\fR
+Minimum parallel probes
+.TP
+\fB--max-parallelism\fR
+Maximum parallel probes
+.TP
+\fB--min-hostgroup\fR
+Minimum hosts per group
+.TP
+\fB--max-hostgroup\fR
+Maximum hosts per group
+.TP
+\fB--initial-rtt-timeout\fR
+Initial RTT timeout
+.TP
+\fB--min-rtt-timeout\fR
+Minimum RTT timeout
+.TP
+\fB--max-rtt-timeout\fR
+Maximum RTT timeout
+.TP
+\fB--scan-delay\fR
+Delay between probes
+.TP
+\fB--max-scan-delay\fR
+Maximum probe delay
+.TP
+\fB--max-attempts\fR
+Maximum probe attempts
+.TP
+\fB--script-timeout\fR
+Timeout per NSE script
+.TP
+\fB--exclude-ports\fR
+Ports to exclude
+.TP
+\fB--fast-scan\fR, \fB-F\fR
+Fast (100 most common ports)
+.TP
+\fB--randomize-ports\fR, \fB-r\fR
+Scan ports in random order
+.TP
+\fB--all-ports\fR, \fB-p-\fR
+Scan all 65535 ports
+.TP
+\fB--version-intensity\fR
+Version detection intensity 0-9
+.TP
+\fB--version-light\fR
+Light version detection
+.TP
+\fB--version-all\fR
+Aggressive version detection
+.TP
+\fB--version-trace\fR
+Trace version detection
+.TP
+\fB--os-detection\fR, \fB-O\fR
+OS detection
+.TP
+\fB--fuzzy\fR
+Fuzzy OS match
+.TP
+\fB--script-args-file\fR
+Read NSE arguments from a file
+.TP
+\fB--script-trace\fR
+Trace NSE traffic
+.TP
+\fB--script-updatedb\fR
+Update the local NSE script database
+.TP
+\fB--packet-trace\fR
+Trace sent/received packets (needs --verbose)
+.TP
+\fB--extra-verbose\fR, \fB-vv\fR
+Extra verbose output
+.TP
+\fB--debug\fR, \fB-ddd\fR
+Debug output
+.TP
+\fB--source-port\fR
+Fixed source port
+.TP
+\fB--data-length\fR
+Append random data to probes
+.TP
+\fB--ttl\fR
+Set IPv4 TTL
+.TP
+\fB--mtu\fR
+Set IP MTU
+.TP
+\fB--config\fR
+Load an extra config file
+.TP
+\fB--list-profiles\fR
+Show every profile
+.TP
+\fB--list-scripts\fR
+Browse local NSE scripts
+.TP
+\fB--script-help\fR
+Show NSE script documentation
+.TP
+\fB--history\fR
+List previous runs
+.TP
+\fB--diff\fR
+Compare two runs
+.TP
+\fB--open-report\fR
+Open an HTML report
+.TP
+\fB--export\fR
+Handoff list (urls, hosts, ports, openvas)
+.TP
+\fB--doctor\fR
+Check the environment
+.TP
+\fB--check-updates\fR
+Nmap version information
+.TP
+\fB--online\fR
+Query nmap.org for the latest version
+.TP
+\fB--dump-options\fR
+Print the option registry as JSON
+.TP
+\fB--explain\fR
+Explain why each Nmap argument was added
+.TP
+\fB--verbose\fR, \fB-v\fR
+Debug output
+.TP
+\fB--version\fR
+Print version
+.TP
+\fB--help\fR, \fB-h\fR
+Show help
+.SH SEE ALSO
+.BR nmap (1)

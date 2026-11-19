@@ -353,3 +353,6 @@ ui_menu() {
         esac
     done
 }
+
+ui_define_colors
+ui_define_symbols

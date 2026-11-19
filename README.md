@@ -1,6 +1,6 @@
 <div align="center">
 
-# XamlTech Nmap Toolkit  `v2.0`
+# XamlTech Nmap Toolkit  `v2.1`
 
 **A colorful, scriptable command-line cockpit for Nmap - discovery, 30+ scan profiles, NSE intelligence,
 change detection and shareable HTML reports.**
@@ -67,8 +67,9 @@ Redis/Memcached, expired/self-signed/SHA-1 certificates, TLS 1.0/1.1, weak ciphe
 methods… graded `CRITICAL → INFO` with a recommendation. They are *hints* - verify before acting.
 
 **Change detection.** Every run is compared with the previous run of the same profile + target:
-new hosts, opened/closed ports, service changes, new/resolved findings. `--diff A B`, `--history`, and
-`python3 lib/report.py diff … --fail-on-change` for CI.
+new hosts, opened/closed ports, service changes, new/resolved findings (`rule_id` on every finding).
+`--diff A B`, `--history`, `baseline create|check`, SARIF export, and
+`python3 lib/report.py diff … --fail-on HIGH` (exit `10`) for CI.
 
 **Graceful privileges.** Not root? SYN→connect, UDP/OS detection dropped - and the plan tells you exactly what
 changed. `--sudo` re-runs through sudo (explicit opt-in, never automatic). cap_net_raw is detected too.
@@ -89,24 +90,34 @@ Full table with risk, privilege need and speed: **[docs/PROFILES.md](docs/PROFIL
 ```
 Targets   -t/--target  -L/--target-file  --exclude  --scope FILE
 Profiles  -p/--profile  -a/--args (custom)
-Tuning    -T 0-5  --ports  --top-ports  --scripts  --script-args  --max-rate  --max-retries
-          --host-timeout  --dns-servers  -e IFACE  --no-ping  --no-dns  -6
+Tuning    -T 0-5  --ports  --top-ports  --max-rate  --max-retries  --host-timeout
+          --min-rate  --min-parallelism  --scanflags  --version-intensity  --mtu  --ttl
+NSE       --scripts  --script-args  --list-scripts [F]  --script-help NAME
 Output    -o DIR  --formats json,csv,md,html  --open  --notify  --no-latency  --theme  --no-color
-Safety    --authorized  --dry-run  --sudo  -y
-Tools     --list-profiles  --list-scripts [F]  --script-help NAME  --history  --diff A B
-          --open-report  --export KIND  --doctor  --check-updates [--online]  --config FILE
+Safety    --authorized  --dry-run  --sudo  -y  --scope FILE  --policy advanced --ack-risk
+          --json  --plan-file PLAN.json --plan-hash HASH  --explain
+Automation --save-preset NAME  --preset NAME  --replay N  --target-group NAME
+          --stage discovery|ports|services  --resume RUN_DIR  --estimate
+          --incremental baseline/report.json
+Tools     --list-profiles  --history  --diff A B  --open-report  --export KIND
+          --doctor  --check-updates [--online]  --config FILE  --dump-options
 ```
 
 Config files (`/etc/xamltech-nmap-toolkit.conf`, `~/.config/xamltech-nmap-toolkit/config`, `./.xamltech-nmap.conf`)
 are parsed as **data** with a key whitelist - never sourced. Example: [config/xamltech-nmap.conf.example](config/xamltech-nmap.conf.example).
+The option registry in `lib/options.sh` is the single source of truth for help, completions (bash/zsh/fish),
+the generated man page and [docs/OPTIONS.md](docs/OPTIONS.md); regenerate with `make completions options-docs`.
 
 ## Security model
 
 * Allowlist target validation; no shell string is ever built from input (Nmap args are arrays).
 * Non-private/unresolvable targets need a typed `I AM AUTHORIZED` (interactive) or `--authorized` (automation).
-* `--scope FILE` refuses anything outside your authorized CIDRs/hosts, with CIDR-containment checks.
-* **Not included, by design:** brute-force, DoS, exploit and fuzzer NSE categories, output-flag passthrough,
-  silent privilege escalation, evasion/spoofing options. HTTP scripts identify themselves honestly in the User-Agent.
+* `--scope FILE` refuses anything outside your authorized CIDRs/hosts, with CIDR-containment checks. JSON scope v2
+  adds `deny`, `valid_from`, `valid_until`/`expires` and `max_hosts` (violations exit `4`).
+* Approved automation can bind a dry-run to a hash: `--plan-file PLAN.json --plan-hash HASH`. Run metadata is
+  appended to a `0600` audit log with operator, commit, plan hash and exit code.
+* **Not included, by design:** brute-force, DoS, exploit and fuzzer NSE categories, decoys, source spoofing,
+  proxies, `--badsum`, fragmentation/evasion, output-flag passthrough, silent privilege escalation. HTTP scripts identify themselves honestly in the User-Agent.
 * Scan results are untrusted input: HTML/CSV/Markdown output is escaped or neutralised; XML entities are rejected.
 
 ## Results layout
@@ -124,8 +135,9 @@ results/2026-11-17_102138_recon_192.168.1.0_24/
 ## Development
 
 ```bash
-make test      # 117 checks: static, validation, guard rails, report engine, diff, live localhost scans
+make test      # static, validation, guard rails, report engine, diff, compliance, UX, live localhost scans
 make lint      # ShellCheck + py_compile
+make option-drift   # regenerate and verify help/completions/docs are in sync
 ```
 CI runs both on every push. See [CONTRIBUTING.md](CONTRIBUTING.md).
 

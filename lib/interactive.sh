@@ -93,6 +93,54 @@ advanced_options() {
     if confirm "Treat hosts as up (skip ping, -Pn)?"; then NO_PING=1; fi
 }
 
+apply_registry_option() {
+    local canon="$1" value="$2" var current
+    option_validate "$canon" "$value" || return 1
+    opt_store_override "$canon" "$value"
+    var="${OPTION_CONFIG_MAP[$canon]:-}"
+    [[ -n "$var" ]] || return 0
+    current="${!var:-}"
+    case "$var" in
+        PING_LATENCY) PING_LATENCY=$([[ "$value" == 0 ]] && echo 0 || echo 1) ;;
+        OPEN_REPORT|NOTIFY) printf -v "$var" '%s' "$([[ "$value" == 0 ]] && echo 0 || echo 1)" ;;
+        *) printf -v "$var" '%s' "$value" ;;
+    esac
+}
+
+registry_current_value() {
+    local canon="$1" var="${OPTION_CONFIG_MAP[$1]:-}"
+    if [[ -n "$var" ]]; then printf '%s' "${!var:-}"; else printf '%s' "${OVERRIDE_VALUES[$canon]:-}"; fi
+}
+
+advanced_options_menu() {
+    local -a cats=() recs=() opts=()
+    local row cat title desc rec flag canon vkind current
+    while IFS='|' read -r cat title desc; do
+        cats+=("$cat|$title|$desc")
+    done < <(options_emit_categories)
+    ui_menu "Advanced option categories" "${cats[@]}" || return 0
+    cat="$MENU_REPLY"
+    mapfile -t recs < <(options_in_category "$cat")
+    for rec in "${recs[@]}"; do
+        _option_parse "$rec"
+        canon="${OPT_FLAG%%,*}"
+        vkind="${OPT_VALUE:-none}"
+        current="$(registry_current_value "$canon")"
+        opts+=("$canon|${OPT_FLAG}|${OPT_DESC}${current:+ (now: $current)}")
+    done
+    ui_menu "Registry options: ${OPTION_CATEGORY_TITLE[$cat]}" "${opts[@]}" || return 0
+    canon="$MENU_REPLY"
+    vkind="$(option_lookup "$canon" value)"
+    if [[ "$vkind" == none ]]; then
+        apply_registry_option "$canon" 1
+        ok "Enabled $canon"
+    else
+        current="$(registry_current_value "$canon")"
+        ask "$canon value" "${current:-$(option_lookup "$canon" default)}"
+        apply_registry_option "$canon" "$REPLY" && ok "Set $canon=$REPLY"
+    fi
+}
+
 # ---------- flows ----------
 
 authorization_notice() {
@@ -219,6 +267,7 @@ interactive_mode() {
             "scan|Guided scan|Pick a target and any of the 30+ profiles" \
             "recon|Smart recon|Pipeline: discover -> ports -> services & scripts" \
             "nse|NSE script packs|Web, TLS, SSH, SMB, DB, mail, Odoo, POS, IoT, audit" \
+            "advanced|Advanced options|Registry categories: targets, tuning, NSE, Nmap, safety" \
             "profiles|Browse profiles|Risk, privileges and speed for every profile" \
             "history|History & reports|Past runs, compare, open HTML reports" \
             "tools|Tools|Doctor, updates, NSE script browser" \
@@ -228,6 +277,7 @@ interactive_mode() {
             scan)     run_isolated guided_scan scan;  pause ;;
             recon)    run_isolated guided_scan recon; pause ;;
             nse)      run_isolated guided_scan nse;   pause ;;
+            advanced) run_isolated advanced_options_menu; pause ;;
             profiles) list_profiles; pause ;;
             history)  run_isolated history_menu; pause ;;
             tools)    run_isolated tools_menu; pause ;;

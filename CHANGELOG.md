@@ -1,5 +1,30 @@
 # Changelog
 
+## [2.1.0] - 2026-11-19
+
+### Added
+- Registry-driven option system (`lib/options.sh`): one source for help, validation, completion, config keys,
+  generated `docs/OPTIONS.md`, man page, and `--dump-options`; bash/zsh/fish completions are generated artifacts.
+- Advanced Nmap options with typed validation, privilege adaptation and an explainable plan (`--explain`);
+  `--policy advanced --ack-risk` gates moderate-risk overrides.
+- User profiles (`extends`, `ports`, `args`) and declarative, staged/resumable workflows (`profiles/stages.txt`,
+  `--stage`, `--resume`), with hashed stage markers, `when` conditions and `--incremental` baseline filtering.
+- Report schema v2 with stable `rule_id`, native-XML SHA-256 manifest, `baseline create|check`, SARIF 2.1.0 output,
+  `diff --fail-on SEVERITY` (exit `10`), webhook/email hooks, and `csv-coords` / `json-arm` exports.
+- Compliance: deterministic `--dry-run --json` plans, `--plan-file` + `--plan-hash` verification, JSON scope v2
+  (`deny`, `valid_from`, `valid_until`/`expires`, `max_hosts`), and a `0600` audit log.
+- UX/rollout: registry category screen in interactive mode, `--save-preset` / `--preset`, `--replay`,
+  `--target-group`, `--estimate`, and `make option-drift`.
+
+### Changed
+- `results/latest` is updated atomically; run directories are created under `umask 077`.
+- `--version` now reads the single version constant in `lib/report.py`; hard-coded version removed from the CLI.
+- Help/completions/docs are generated and drift-checked instead of maintained by hand.
+
+### Fixed
+- Mixed `None`/int finding sorting, duplicate `ui_init`, repeatable/space-separated `--target`, and plan-hash
+  verification of wrapped JSON plans.
+
 ## [2.0.0] - 2026-11-17
 
 ### Added

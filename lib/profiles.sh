@@ -50,8 +50,42 @@ WORKFLOW_TABLE=(
 # Profiles that run without any target
 profile_needs_target() { [[ "$1" != "broadcast" ]]; }
 
+declare -A USER_PROFILE=()
+load_user_profiles() {
+    local dir="${XDG_CONFIG_HOME:-$HOME/.config}/xamltech-nmap-toolkit/profiles"
+    local f name key val raw
+    [[ -d "$dir" ]] || return 0
+    for f in "$dir"/*.txt "$dir"/*.profile; do
+        [[ -f "$f" ]] || continue
+        name="$(basename "$f")"; name="${name%.*}"
+        USER_PROFILE["$name.1"]="$name"
+        USER_PROFILE["$name.2"]="User"
+        USER_PROFILE["$name.3"]="${USER_PROFILE["$name.3"]:-safe}"
+        USER_PROFILE["$name.4"]="${USER_PROFILE["$name.4"]:-no}"
+        USER_PROFILE["$name.5"]="${USER_PROFILE["$name.5"]:-medium}"
+        USER_PROFILE["$name.6"]="User profile"
+        USER_PROFILE["$name.extends"]="standard"
+        while IFS= read -r raw || [[ -n "$raw" ]]; do
+            raw="${raw%%#*}"
+            [[ "$raw" =~ ^[[:space:]]*$ ]] && continue
+            key="${raw%%=*}"; val="${raw#*=}"
+            key="${key//[[:space:]]/}"; val="${val#"${val%%[![:space:]]*}"}"
+            case "$key" in
+                extends|ports|desc|risk|root|speed|args) USER_PROFILE["$name.$key"]="$val" ;;
+            esac
+        done < "$f"
+        [[ -z "${USER_PROFILE["$name.desc"]:-}" ]] || USER_PROFILE["$name.6"]="${USER_PROFILE["$name.desc"]}"
+        [[ -z "${USER_PROFILE["$name.risk"]:-}" ]] || USER_PROFILE["$name.3"]="${USER_PROFILE["$name.risk"]}"
+    done
+}
+load_user_profiles
+
 profile_field() {   # profile_field NAME INDEX(1-6)
     local row
+    if [[ -n "${USER_PROFILE["$1.$2"]+x}" ]]; then
+        printf '%s' "${USER_PROFILE["$1.$2"]}"
+        return 0
+    fi
     for row in "${PROFILE_TABLE[@]}"; do
         if [[ "${row%%|*}" == "$1" ]]; then
             IFS='|' read -r -a _f <<< "$row"
@@ -62,12 +96,12 @@ profile_field() {   # profile_field NAME INDEX(1-6)
     return 1
 }
 
-profile_exists()   { profile_field "$1" 1 >/dev/null 2>&1; }
+profile_exists()   { [[ -n "${USER_PROFILE["$1.1"]+x}" ]] || profile_field "$1" 1 >/dev/null 2>&1; }
 workflow_exists()  { local w; for w in "${WORKFLOW_TABLE[@]}"; do [[ "${w%%|*}" == "$1" ]] && return 0; done; return 1; }
 profile_risk()     { profile_field "$1" 3; }
 profile_root()     { profile_field "$1" 4; }
 profile_desc()     { profile_field "$1" 6; }
-profile_names()    { local r; for r in "${PROFILE_TABLE[@]}"; do printf '%s\n' "${r%%|*}"; done; for r in "${WORKFLOW_TABLE[@]}"; do printf '%s\n' "${r%%|*}"; done; printf 'custom\n'; }
+profile_names()    { local r; for r in "${PROFILE_TABLE[@]}"; do printf '%s\n' "${r%%|*}"; done; for r in "${WORKFLOW_TABLE[@]}"; do printf '%s\n' "${r%%|*}"; done; printf '%s\n' "${!USER_PROFILE[@]}" | grep -E '\.1$' | cut -d. -f1; printf 'custom\n'; }
 
 validate_profile() {
     profile_exists "$1" || workflow_exists "$1" || [[ "$1" == custom ]] \
@@ -97,6 +131,15 @@ list_profiles() {
         printf '  %s%-14s%s %-19s %-5s %-7s %s%s%s\n' "$C_WHITE$C_BOLD" "$name" "$C_RESET" \
             "$(risk_badge "$risk")" "$root" "$speed" "$C_GRAY" "$desc" "$C_RESET"
     done
+    if (( ${#USER_PROFILE[@]} )); then
+        printf '\n  %s%s%s\n' "$C_ACCENT$C_BOLD" "User" "$C_RESET"
+        local un
+        for un in "${!USER_PROFILE[@]}"; do
+            [[ "$un" == *.6 ]] || continue
+            printf '  %s%-14s%s %-19s %s\n' "$C_WHITE$C_BOLD" "${un%.6}" "$C_RESET" \
+                "$(risk_badge "${USER_PROFILE["${un%.6}.3"]:-safe}")" "${USER_PROFILE["$un"]}"
+        done
+    fi
     printf '\n  %sWorkflows%s\n' "$C_ACCENT$C_BOLD" "$C_RESET"
     for w in "${WORKFLOW_TABLE[@]}"; do
         printf '  %s%-14s%s %s%s%s\n' "$C_WHITE$C_BOLD" "${w%%|*}" "$C_RESET" "$C_GRAY" "${w#*|}" "$C_RESET"
@@ -123,6 +166,22 @@ build_nmap_args() {
     NMAP_ARGS=()
     NSE_MISSING=()
     local sd="$SCRIPTS_DIR"
+
+    if [[ -n "${USER_PROFILE["$profile.1"]+x}" ]]; then
+        local base saved_ports="${PORTS:-}" saved_args=""
+        base="${USER_PROFILE["$profile.extends"]}"
+        [[ "$base" != "$profile" ]] || die "User profile '$profile' cannot extend itself."
+        [[ -z "${USER_PROFILE["$profile.args"]:-}" ]] || saved_args="${USER_PROFILE["$profile.args"]}"
+        [[ -z "${USER_PROFILE["$profile.ports"]:-}" ]] || PORTS="${USER_PROFILE["$profile.ports"]}"
+        if [[ -n "$saved_args" ]]; then
+            split_args "$saved_args"
+            CUSTOM_ARGS=("${SPLIT_RESULT[@]}")
+            profile=custom
+        fi
+        build_nmap_args "$base"
+        PORTS="$saved_ports"
+        return 0
+    fi
 
     case "$profile" in
         discovery)     NMAP_ARGS=(-sn --reason) ;;
@@ -288,5 +347,88 @@ apply_overrides() {
     (( ${NO_DNS:-0} ))    && NMAP_ARGS+=(-n)
     (( ${IPV6:-0} ))      && NMAP_ARGS+=(-6)
     if (( ${EXTRA_VERBOSE:-0} )); then NMAP_ARGS+=(-v); fi
+    apply_registry_overrides
     return 0
 }
+
+EXPLICIT_OVERRIDE_FLAGS=' --timing --ports --top-ports --max-rate --max-retries --host-timeout --dns-servers --interface --no-ping --no-dns --ipv6 --scripts --script-args --exclude '
+OVERRIDE_TRACE=()
+
+apply_registry_overrides() {
+    local rec canon tmpl flag strip val rendered
+    OVERRIDE_TRACE=()
+    for rec in "${OPTION_TABLE[@]}"; do
+        _option_parse "$rec"
+        canon="$(opt_canonical "$OPT_FLAG")"
+        tmpl="$OPT_NMAP"
+        [[ -n "$tmpl" ]] || continue
+        [[ "$EXPLICIT_OVERRIDE_FLAGS" == *" $canon "* ]] && continue
+        [[ -n "${OVERRIDE_VALUES[$canon]+x}" ]] || continue
+        flag="${tmpl%% *}"
+        val="${OVERRIDE_VALUES[$canon]}"
+        if [[ "$tmpl" == *%v* ]]; then
+            strip="${flag%%%v}*"
+            rendered="${tmpl//%v/$val}"
+        else
+            strip="${flag}:"
+            rendered="$tmpl"
+        fi
+        _strip_args "$strip"
+        NMAP_ARGS+=("$rendered")
+        OVERRIDE_TRACE+=("$rendered (from $canon)")
+    done
+}
+
+STAGE_TABLE=()
+
+load_stage_records() {
+    local file line kind pipeline index name profile targets when ports scripts timeout on_fail
+    local extra
+    STAGE_TABLE=()
+    for file in \
+        "${XAMLTECH_NMAP_STAGES_FILE:-${TOOLKIT_HOME:-.}/profiles/stages.txt}" \
+        "$(config_dir)/profiles/stages.txt"; do
+        [[ -r "$file" ]] || continue
+        while IFS= read -r line || [[ -n "$line" ]]; do
+            line="${line%%#*}"
+            line="${line#"${line%%[![:space:]]*}"}"
+            line="${line%"${line##*[![:space:]]}"}"
+            [[ -n "$line" ]] || continue
+            IFS='|' read -r kind pipeline index name profile targets when ports scripts timeout on_fail extra <<< "$line"
+            if [[ "$kind" != stage || -n "${extra:-}" || -z "$pipeline" || -z "$on_fail" ]]; then
+                DIE_CODE=2 die "Malformed stage record: $line"
+            fi
+            [[ "$index" =~ ^[1-9][0-9]*$ ]] || DIE_CODE=2 die "Malformed stage index: $line"
+            [[ "$name" =~ ^[a-z][a-z0-9_-]*$ ]] || DIE_CODE=2 die "Malformed stage name: $line"
+            profile_exists "$profile" || DIE_CODE=2 die "Unknown stage profile '$profile': $line"
+            [[ "$targets" == original || "$targets" == hosts-up || "$targets" == hosts-open ]] \
+                || DIE_CODE=2 die "Malformed stage targets: $line"
+            if [[ -n "$when" && ! "$when" =~ ^port\ in\ [0-9,]+$ && ! "$when" =~ ^host_count\ [\>\=]\ [0-9]+$ ]]; then
+                DIE_CODE=2 die "Malformed stage condition: $line"
+            fi
+            [[ -z "$ports" || "$ports" =~ ^[0-9TUSP:,-]+$ ]] \
+                || DIE_CODE=2 die "Malformed stage ports: $line"
+            [[ -z "$scripts" ]] || guard_script_spec "$scripts"
+            [[ "$timeout" == 0 || "$timeout" =~ ^[0-9]+[smhd]?$ ]] \
+                || DIE_CODE=2 die "Malformed stage timeout: $line"
+            [[ "$on_fail" == abort || "$on_fail" == continue ]] \
+                || DIE_CODE=2 die "Malformed stage on_fail: $line"
+            STAGE_TABLE+=("$pipeline|$index|$name|$profile|$targets|$when|$ports|$scripts|$timeout|$on_fail")
+        done < "$file"
+    done
+}
+
+stages_for_pipeline() {
+    local wanted="$1" row
+    for row in "${STAGE_TABLE[@]}"; do
+        [[ "${row%%|*}" == "$wanted" ]] && printf '%s\n' "$row"
+    done | sort -t'|' -k2,2n -k3,3
+}
+
+stage_field() {
+    local row="$1" field="$2" IFS='|'
+    read -r -a _f <<< "$row"
+    printf '%s' "${_f[$(( field - 1 ))]}"
+}
+
+load_stage_records
