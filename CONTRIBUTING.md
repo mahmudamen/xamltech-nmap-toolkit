@@ -31,3 +31,9 @@ bash tests/test_shellcheck.sh
 ```
 
 For functional tests, use an authorized local lab or test network.
+
+
+## v2 notes
+- Run `make lint test` before opening a PR; new behavior needs a test in `tests/run.sh`.
+- New profiles go in `PROFILE_TABLE` + `build_nmap_args` (`lib/profiles.sh`); regenerate `docs/PROFILES.md`.
+- Do not add brute-force, DoS, exploit or evasion features - they are out of scope for this project.

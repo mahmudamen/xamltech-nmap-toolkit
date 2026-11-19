@@ -1,0 +1,7 @@
+# Authorized scope file (use with --scope scope.txt).
+# One entry per line: IP, CIDR, IP range, hostname or *.wildcard.domain
+10.10.0.0/16
+192.168.1.0/24
+172.16.5.10-172.16.5.50
+erp.example.com
+*.lab.example.com

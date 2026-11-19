@@ -1,105 +1,48 @@
-# Usage Guide
+# Usage guide
 
-## 1. Start Interactive Mode
-
+## 1. Interactive mode
 ```bash
 ./nmap-toolkit.sh
 ```
+Arrow keys / `j` `k` move, Enter selects, digits jump, `q` cancels. Menus: Guided scan, Smart recon, NSE script
+packs, Browse profiles, History & reports (open/compare), Tools (doctor, updates, NSE browser), Settings
+(theme, formats, output dir - can be saved to `~/.config/xamltech-nmap-toolkit/config`). Your local subnets are
+detected automatically. Non-TTY input falls back to numbered prompts.
 
-The interactive workflow is:
+## 2. Targets
+`192.168.1.1` · `192.168.1.0/24` · `192.168.1.1-254` · `10.0.1-3.*` · `router.local` · `::1` ·
+several separated by spaces · `-L targets.txt` (one per line, `#` comments) · `--exclude 192.168.1.1,192.168.1.254`.
 
-```text
-Dependency check
-       ↓
-Nmap update check
-       ↓
-Target selection
-       ↓
-Profile selection
-       ↓
-Authorization confirmation
-       ↓
-Nmap scan
-       ↓
-XML export
-       ↓
-Host inventory
-       ↓
-Latency report
-       ↓
-Summary
-```
+Private/loopback/link-local targets proceed after the normal confirmation. Anything else (public IPs,
+unresolvable names) needs a typed phrase interactively, or `--authorized` in scripts. With `--scope FILE`
+(see `config/scope.example.txt`) anything outside the list is refused.
 
-## 2. Choosing a Target
+## 3. Privileges
+Raw-socket features (SYN, UDP, OS detection, ARP, traceroute) need root or `cap_net_raw`. Without them the
+toolkit rewrites the command (`-sS→-sT`, drops `-sU`/`-O`/…) and shows each change in the plan.
+`--sudo` re-runs the toolkit via sudo; ownership of results is handed back to your user.
 
-Supported examples:
-
-```text
-192.168.1.1
-192.168.1.0/24
-192.168.1.1-254
-router.local
-```
-
-Only pass targets that you are authorized to scan.
-
-## 3. Recommended Workflow
-
-For a LAN:
-
+## 4. Recommended workflow
 ```bash
-./nmap-toolkit.sh --target 192.168.1.0/24 --profile discovery
+./nmap-toolkit.sh -t 192.168.1.0/24 -p recon       # everything alive + what runs on it
+./nmap-toolkit.sh -t 192.168.1.20  -p tls          # drill into one service family
+./nmap-toolkit.sh --diff results/<old> latest      # what changed?
 ```
 
-Review:
-
-```text
-results/<timestamp>/hosts-up.txt
-```
-
-Then inspect individual systems:
-
+## 5. Automation (cron/CI)
 ```bash
-./nmap-toolkit.sh --target 192.168.1.10 --profile standard
+./nmap-toolkit.sh -t 10.0.0.0/24 -p recon -y --no-color --no-banner --scope scope.txt \
+    --formats json,html -o /var/lib/xamltech-nmap
 ```
+Exit codes: `0` ok · `1` error · `2` usage · `3` missing dependency · `4` blocked by policy (scope/authorization/NSE guard) · `130` interrupted.
 
-For a system you administer:
+## 6. Colors & terminals
+Truecolor when `COLORTERM=truecolor`, else 256-color; `NO_COLOR` and `--no-color` disable; non-UTF-8 locales get
+an ASCII layout. Themes: cyber, ocean, sunset, matrix, aurora, mono.
 
-```bash
-sudo ./nmap-toolkit.sh --target 192.168.1.10 --profile os
-```
-
-## 4. Saving Elsewhere
-
-```bash
-./nmap-toolkit.sh \
-  --target 192.168.1.0/24 \
-  --profile discovery \
-  --output ./network-audit
-```
-
-## 5. Automation
-
-The CLI interface is suitable for shell automation:
-
-```bash
-./nmap-toolkit.sh \
-  --target 192.168.1.0/24 \
-  --profile discovery \
-  --yes
-```
-
-Use the generated `nmap.xml` for downstream processing.
-
-## 6. Custom Profile
-
-Example:
-
-```bash
-./nmap-toolkit.sh \
-  --target 192.168.1.1 \
-  --profile custom \
-  --args "-sV --top-ports 100"
-```
-
-The custom mode passes arguments directly to Nmap as individual arguments. Do not place shell commands in the argument string.
+## 7. Troubleshooting
+* `--doctor` checks Nmap, NSE scripts, Python, privileges, terminal and output directory.
+* Hosts shown "down": firewalls/ICMP filtering - retry with `--no-ping`.
+* Missing HTML/JSON: install `python3`.
+* A profile skips scripts: they are validated against the local `script.db`; skipped names are listed in the plan.
+* Custom NSE `odoo-info.nse` needs service detection (`-sV`) to recognise the port as HTTP - built-in profiles do this.

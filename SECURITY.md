@@ -1,30 +1,17 @@
 # Security Policy
 
-## Authorized Use
+## Authorized use
+Network administration, asset inventory, diagnostics, authorized security testing, labs. Do not use against
+systems or networks without permission.
 
-This toolkit is intended for:
+## What the toolkit refuses to do
+Brute-force / DoS / exploit / fuzzer NSE scripts, user-supplied output flags, silent sudo, and scanning outside a
+supplied `--scope` file. Non-private targets require explicit consent. These are intentional and tested.
 
-- network administration
-- asset inventory
-- diagnostics
-- authorized security testing
-- development and lab environments
+## Reporting a vulnerability
+Please do not publish details in a public issue. Contact the maintainer via the author's profile / https://xamltech.com.
 
-Do not use it against systems or networks without permission.
-
-## Reporting a Security Issue
-
-Please avoid publishing sensitive vulnerability details in a public issue.
-
-Contact the project maintainer through the contact information published on the author's official profile/site.
-
-## Scope
-
-Security reports concerning the toolkit itself are welcome, especially:
-
-- command injection
-- unsafe argument handling
-- privilege escalation
-- unintended file writes
-- credential exposure
-- unsafe temporary-file handling
+## In scope
+Command/argument injection, unsafe argument or config handling, privilege escalation, unintended file writes,
+unsafe temp files, credential exposure, **report injection (HTML/CSV/Markdown) from hostile banners**, XML parsing
+issues, and bypasses of scope/authorization/NSE guards.

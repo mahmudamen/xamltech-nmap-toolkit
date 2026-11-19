@@ -1,63 +1,13 @@
-# Project Overview
+# XamlTech Nmap Toolkit - project notes
 
-## Goal
+Purpose: a safe, fast, pleasant CLI around Nmap for authorized discovery, inventory, diagnostics and exposure review,
+with first-class Odoo/POS awareness.
 
-Provide a small, understandable Bash interface for Nmap that makes routine authorized network discovery easier without hiding what Nmap is doing.
+Layout: `nmap-toolkit.sh` (CLI) · `lib/` (ui, core, nse, profiles, scan, interactive, report.py, render.awk) ·
+`scripts/odoo-info.nse` · `tests/` · `docs/` · `config/` · `completions/` · `install.sh`.
 
-## Non-Goals
+Principles: explicit over magical · safe defaults · data never becomes code · reproducible output ·
+small dependency footprint (Bash, Nmap, optional stdlib-only Python) · no offensive features.
 
-This project is not intended to be:
-
-- an exploitation framework
-- a credential attack framework
-- a persistence tool
-- a stealth framework
-- a vulnerability weaponization platform
-
-## Architecture
-
-```text
-CLI / Interactive UI
-        |
-        v
-Argument Validation
-        |
-        v
-Profile Builder
-        |
-        v
-Nmap
-        |
-        +------------------+
-        |                  |
-        v                  v
-   nmap.txt            nmap.xml
-        |                  |
-        +--------+---------+
-                 |
-                 v
-          Result Processor
-                 |
-        +--------+--------+
-        |        |        |
-        v        v        v
-     Hosts    Latency   Summary
-```
-
-## Design Decisions
-
-### Bash
-
-Bash keeps the deployment footprint extremely small and works well for Linux administration environments.
-
-### Nmap
-
-Nmap remains the actual network scanning engine. This project intentionally does not attempt to reimplement network discovery.
-
-### XML
-
-Nmap XML output is retained because structured output is significantly more useful than parsing terminal formatting in downstream automation.
-
-### Explicit Privileges
-
-The toolkit does not automatically run itself through `sudo`. Users decide when elevated privileges are appropriate.
+Roadmap ideas: SARIF/Markdown ticket export, webhook notifications, per-profile config overrides,
+Odoo version support matrix fetched at runtime, PostgreSQL/odoo.conf hardening checks via authenticated SSH (opt-in).

@@ -1,439 +1,147 @@
-# XamlTech Nmap Toolkit
+<div align="center">
 
-**Interactive network discovery and diagnostics toolkit built with Bash + Nmap.**
+# XamlTech Nmap Toolkit  `v2.0`
 
-The XamlTech Nmap Toolkit provides a clean interactive and CLI interface around Nmap for **authorized network inventory, host discovery, latency diagnostics, port discovery, service/version detection, OS identification, and reproducible result collection**.
+**A colorful, scriptable command-line cockpit for Nmap - discovery, 30+ scan profiles, NSE intelligence,
+change detection and shareable HTML reports.**
 
-> **Authorization required:** Use this project only against systems and networks you own or are explicitly authorized to test.
+`Bash` · `Nmap` · `NSE` · `Python (stdlib)` · `Linux` · `MIT`
 
----
+![terminal](docs/assets/terminal-recon.png)
 
-## Features
+</div>
 
-- Interactive terminal UI
-- CLI automation mode
-- Host, hostname, IP range, and CIDR targets
-- Scan profiles:
-  - Discovery
-  - Quick
-  - Standard
-  - Deep
-  - OS detection
-  - Diagnostic
-  - Custom
-- Host up/down discovery
-- Latency measurement for discovered hosts
-- TCP port discovery
-- Service/version detection
-- OS detection
-- Optional traceroute diagnostics
-- Nmap dependency detection
-- Local Nmap update/candidate check on Debian/Ubuntu systems
-- Human-readable logs
-- Nmap XML output for automation
-- Per-scan result directories
-- ShellCheck CI
-- No silent package installation
-- Explicit authorization confirmation in interactive mode
+> **Authorization required.** Use this project only against systems and networks you own or are explicitly
+> authorized to test.
 
 ---
 
-## Requirements
+## Why v2
 
-Linux with:
+| | v1 | **v2** |
+|---|---|---|
+| Interface | prompts | gradient headline, 6 themes, arrow-key menus, live progress bar, colorized Nmap output |
+| Profiles | 7 | **33** + multi-stage `recon` / `inventory` workflows |
+| NSE | none | validated script packs (web, TLS, SSH, SMB, DB, mail, RDP, FTP, **Odoo**, **POS**, IoT, audit) + custom `odoo-info.nse` |
+| Output | `.txt` + `.xml` | + `.gnmap`, **JSON, CSV, Markdown, self-contained HTML**, findings with severity |
+| Change detection | - | automatic diff against the previous run, `--diff`, `--history` |
+| Safety | metachar blocklist | allowlist validation, scope file, typed consent for non-private targets, blocked brute/DoS/exploit NSE, dry-run |
+| Unprivileged use | SYN scans fail | automatic, reported fallback to TCP-connect |
+| Tests | ShellCheck only | 117 automated checks, incl. live scans of localhost and hostile-banner injection tests |
 
-- Bash 4+
-- Nmap
-- `awk`
-- `sed`
-- `grep`
-- `date`
-- `mkdir`
-- `tee`
-- `timeout`
-- `sort`
-- `ping` is recommended for latency reporting
+![report](docs/assets/html-report.png)
 
-### Install Nmap
-
-Ubuntu/Debian:
+## Install
 
 ```bash
-sudo apt update
-sudo apt install nmap
-```
-
-Fedora:
-
-```bash
-sudo dnf install nmap
-```
-
-Arch Linux:
-
-```bash
-sudo pacman -S nmap
-```
-
-Check:
-
-```bash
-nmap --version
-```
-
----
-
-## Installation
-
-Clone the repository:
-
-```bash
+sudo apt install nmap python3          # Debian/Ubuntu (python3 is optional but enables reports)
 git clone https://github.com/mahmudamen/xamltech-nmap-toolkit.git
 cd xamltech-nmap-toolkit
+./nmap-toolkit.sh --doctor             # run in place, or:
+./install.sh --user                    # installs `xamltech-nmap` + bash completion under ~/.local
 ```
 
-Make the script executable:
+Requirements: Linux, Bash 4.4+, Nmap, standard coreutils. Optional: `python3` (reports), `ping`, `ip`.
+
+## Quick start
 
 ```bash
-chmod +x nmap-toolkit.sh
+./nmap-toolkit.sh                                        # guided, arrow-key menu (auto-detects your subnets)
+./nmap-toolkit.sh -t 192.168.1.0/24 -p recon --open      # discover → ports → versions/scripts, then open the report
+./nmap-toolkit.sh -t erp.example.com -p odoo             # Odoo exposure review
+./nmap-toolkit.sh -t 10.0.0.0/24 -p audit --scope scope.txt --sudo
+./nmap-toolkit.sh -t 10.0.0.5 -p tls --dry-run           # show the exact Nmap command, run nothing
 ```
 
-Run:
+## Highlights
 
-```bash
-./nmap-toolkit.sh
+**Smart workflows.** `recon` finds live hosts, port-scans only those, then runs version detection and scripts
+*only on ports that actually exist* - minutes instead of hours versus a blanket `-p-` scan.
+
+**Odoo & POS aware** (built for ERP estates): the bundled `scripts/odoo-info.nse` (read-only) reports the Odoo
+version, whether the **database list** is public, whether the **database manager** page is reachable and whether
+the version is out of support. The `pos` profile covers ESC/POS printers (9100), CUPS/IPP and Odoo POS ports.
+
+**Findings engine.** Exposed Telnet/FTP/RDP/databases, SMBv1 & signing, anonymous FTP, unauthenticated
+Redis/Memcached, expired/self-signed/SHA-1 certificates, TLS 1.0/1.1, weak ciphers/SSH algorithms, risky HTTP
+methods… graded `CRITICAL → INFO` with a recommendation. They are *hints* - verify before acting.
+
+**Change detection.** Every run is compared with the previous run of the same profile + target:
+new hosts, opened/closed ports, service changes, new/resolved findings. `--diff A B`, `--history`, and
+`python3 lib/report.py diff … --fail-on-change` for CI.
+
+**Graceful privileges.** Not root? SYN→connect, UDP/OS detection dropped - and the plan tells you exactly what
+changed. `--sudo` re-runs through sudo (explicit opt-in, never automatic). cap_net_raw is detected too.
+
+**Handoffs.** `--export urls|hostports|hosts|ports|openvas` feeds ZAP/Burp, Masscan, OpenVAS/Nessus. See
+[docs/INTEGRATIONS.md](docs/INTEGRATIONS.md).
+
+## Profiles (33)
+
+`discovery arp sweep diagnostic list broadcast` · `quick standard deep full os udp firewall polite` ·
+`default safe-nse discovery-nse vuln-safe vuln vulners` · `web tls ssh smb dns db mail rdp ftp` ·
+`odoo pos iot` · `audit` · workflows `recon inventory` · `custom`
+
+Full table with risk, privilege need and speed: **[docs/PROFILES.md](docs/PROFILES.md)** or `--list-profiles`.
+
+## Options at a glance
+
+```
+Targets   -t/--target  -L/--target-file  --exclude  --scope FILE
+Profiles  -p/--profile  -a/--args (custom)
+Tuning    -T 0-5  --ports  --top-ports  --scripts  --script-args  --max-rate  --max-retries
+          --host-timeout  --dns-servers  -e IFACE  --no-ping  --no-dns  -6
+Output    -o DIR  --formats json,csv,md,html  --open  --notify  --no-latency  --theme  --no-color
+Safety    --authorized  --dry-run  --sudo  -y
+Tools     --list-profiles  --list-scripts [F]  --script-help NAME  --history  --diff A B
+          --open-report  --export KIND  --doctor  --check-updates [--online]  --config FILE
 ```
 
----
+Config files (`/etc/xamltech-nmap-toolkit.conf`, `~/.config/xamltech-nmap-toolkit/config`, `./.xamltech-nmap.conf`)
+are parsed as **data** with a key whitelist - never sourced. Example: [config/xamltech-nmap.conf.example](config/xamltech-nmap.conf.example).
 
-## Quick Start
+## Security model
 
-### Interactive
+* Allowlist target validation; no shell string is ever built from input (Nmap args are arrays).
+* Non-private/unresolvable targets need a typed `I AM AUTHORIZED` (interactive) or `--authorized` (automation).
+* `--scope FILE` refuses anything outside your authorized CIDRs/hosts, with CIDR-containment checks.
+* **Not included, by design:** brute-force, DoS, exploit and fuzzer NSE categories, output-flag passthrough,
+  silent privilege escalation, evasion/spoofing options. HTTP scripts identify themselves honestly in the User-Agent.
+* Scan results are untrusted input: HTML/CSV/Markdown output is escaped or neutralised; XML entities are rejected.
 
-```bash
-./nmap-toolkit.sh
-```
-
-The program asks for:
-
-1. Target
-2. Scan profile
-3. Custom arguments if required
-4. Authorization confirmation
-
-Example target:
+## Results layout
 
 ```text
-192.168.1.0/24
+results/2026-11-17_102138_recon_192.168.1.0_24/
+├── nmap.txt  nmap.xml  nmap.gnmap          native Nmap output (+ stage1-/stage2- for workflows)
+├── report.html  report.md  report.json     reports
+├── hosts.csv  services.csv  findings.csv   spreadsheets
+├── hosts-up.txt  host-latency.txt          inventory + parallel latency
+├── diff-vs-previous.txt                    what changed since last time
+└── command.txt  metadata.json  toolkit.log  summary.txt   audit trail
 ```
-
----
-
-## CLI Mode
-
-### Discover hosts
-
-```bash
-./nmap-toolkit.sh \
-  --target 192.168.1.0/24 \
-  --profile discovery
-```
-
-### Standard scan
-
-```bash
-./nmap-toolkit.sh \
-  --target 192.168.1.1 \
-  --profile standard
-```
-
-### Deep scan
-
-```bash
-./nmap-toolkit.sh \
-  --target 192.168.1.1 \
-  --profile deep
-```
-
-### OS detection
-
-```bash
-sudo ./nmap-toolkit.sh \
-  --target 192.168.1.1 \
-  --profile os
-```
-
-### Diagnostics
-
-```bash
-./nmap-toolkit.sh \
-  --target 192.168.1.0/24 \
-  --profile diagnostic
-```
-
-### Custom Nmap arguments
-
-```bash
-./nmap-toolkit.sh \
-  --target 192.168.1.1 \
-  --profile custom \
-  --args "-sV --top-ports 100"
-```
-
----
-
-## Scan Profiles
-
-| Profile | Purpose | Typical Nmap behavior |
-|---|---|---|
-| `discovery` | Inventory reachable hosts | Host discovery |
-| `quick` | Fast port overview | Top 100 TCP ports |
-| `standard` | General inventory | Top 1000 TCP ports + service detection |
-| `deep` | Broad TCP inventory | All TCP ports + service detection |
-| `os` | Host identification | Broad TCP + service + OS detection |
-| `diagnostic` | Network diagnostics | Host discovery + traceroute |
-| `custom` | Advanced users | User-supplied Nmap arguments |
-
-The profiles intentionally favor **visibility and diagnostics** rather than exploitation.
-
----
-
-## Results
-
-Each run creates a timestamped directory:
-
-```text
-results/
-└── 2026-10-03_162241/
-    ├── metadata.txt
-    ├── nmap.txt
-    ├── nmap.xml
-    ├── hosts-up.txt
-    ├── host-latency.txt
-    └── summary.txt
-```
-
-### `nmap.txt`
-
-Human-readable Nmap output.
-
-### `nmap.xml`
-
-Machine-readable Nmap output suitable for:
-
-- reporting tools
-- inventory systems
-- Python scripts
-- CI pipelines
-- future XamlTech integrations
-
-### `hosts-up.txt`
-
-Reachable IPv4 hosts discovered during the run.
-
-### `host-latency.txt`
-
-Basic ICMP latency measurements where `ping` is available.
-
----
-
-## Nmap Update Check
-
-Run:
-
-```bash
-./nmap-toolkit.sh --check-updates
-```
-
-On Debian/Ubuntu, the script can compare the installed version with the local APT candidate.
-
-The script **does not automatically install or upgrade Nmap**.
-
-Example:
-
-```text
-Installed : 7.x
-APT       : 7.x
-
-[WARN] An APT candidate newer than the installed version is available.
-
-Ubuntu/Debian:
-  sudo apt update
-  sudo apt install nmap
-```
-
-For authoritative release information, see the official Nmap project:
-
-https://nmap.org/
-
----
-
-## Root Privileges
-
-Some Nmap capabilities work better with elevated privileges.
-
-For example:
-
-```bash
-sudo ./nmap-toolkit.sh \
-  --target 192.168.1.1 \
-  --profile os
-```
-
-The toolkit does not automatically invoke `sudo`.
-
-This is deliberate: privilege escalation should remain an explicit administrator decision.
-
----
-
-## Security Model
-
-The script:
-
-- does not silently install software
-- does not create persistence
-- does not modify firewall rules
-- does not exploit discovered services
-- does not attempt credential attacks
-- does not hide scan activity
-- rejects several shell metacharacters in target input
-- uses Nmap arguments as an array rather than constructing an executable shell command
-- stores results locally
-- asks for authorization confirmation in interactive mode
-
-Custom Nmap arguments are intentionally available for authorized administrators, but they should be used responsibly.
-
----
-
-## Performance
-
-For a small LAN such as:
-
-```text
-192.168.1.0/24
-```
-
-start with:
-
-```bash
-./nmap-toolkit.sh --target 192.168.1.0/24 --profile discovery
-```
-
-Then investigate specific reachable hosts:
-
-```bash
-./nmap-toolkit.sh --target 192.168.1.10 --profile standard
-```
-
-This two-stage workflow avoids unnecessarily performing expensive scans against every address.
-
----
-
-## Troubleshooting
-
-### `nmap: command not found`
-
-Install Nmap using your distribution's package manager.
-
-### OS detection says root privileges are required
-
-Run:
-
-```bash
-sudo ./nmap-toolkit.sh --target TARGET --profile os
-```
-
-### No latency is shown
-
-Install/use `ping`, and remember that ICMP can be filtered by the target or network.
-
-### A host is shown as down
-
-Host discovery can be affected by:
-
-- firewalls
-- ICMP filtering
-- routing
-- VLAN configuration
-- host security software
-
-A "down" result does not prove that a system is physically offline.
-
----
 
 ## Development
 
-Run ShellCheck manually:
-
 ```bash
-shellcheck nmap-toolkit.sh
+make test      # 117 checks: static, validation, guard rails, report engine, diff, live localhost scans
+make lint      # ShellCheck + py_compile
 ```
+CI runs both on every push. See [CONTRIBUTING.md](CONTRIBUTING.md).
 
-Run the lightweight test:
+## Docs
 
-```bash
-bash tests/test_shellcheck.sh
-```
-
-The GitHub Actions workflow runs ShellCheck automatically.
-
----
-
-## Project Principles
-
-- Explicit over magical behavior
-- Safe defaults
-- Reproducible output
-- Automation-friendly XML
-- Linux-first implementation
-- Small dependency footprint
-- Clear operational feedback
-- No unnecessary privilege escalation
-- Defensive and authorized use
-
----
-
-## Roadmap
-
-Potential future releases:
-
-- [ ] JSON summary output
-- [ ] Better CIDR host inventory parsing
-- [ ] Concurrent latency checks
-- [ ] Config file support
-- [ ] Interactive host selection after discovery
-- [ ] Service inventory table
-- [ ] Markdown/HTML report generation
-- [ ] Network interface selection
-- [ ] IPv6 improvements
-- [ ] Optional DNS inventory
-- [ ] Plugin/profile architecture
-- [ ] Bash completion
-- [ ] Packaging for Debian-based systems
-
----
+[USAGE](docs/USAGE.md) · [PROFILES](docs/PROFILES.md) · [EXAMPLES](docs/EXAMPLES.md) · [REPORTS](docs/REPORTS.md) ·
+[INTEGRATIONS](docs/INTEGRATIONS.md) · [SECURITY](SECURITY.md) · [CHANGELOG](CHANGELOG.md)
 
 ## Author
 
-### Mahmoud Mohamed Amin
+**Mahmoud Mohamed Amin** - Senior Odoo Developer, co-founder of XamlTech · GitHub
+[@mahmudamen](https://github.com/mahmudamen) · https://xamltech.com
 
-Software Developer / Odoo Developer / Systems Builder
-
-- GitHub: **@mahmudamen**
-- Website: **https://xamltech.com**
-
-XamlTech builds business software, ERP systems, automation tools, and developer utilities.
-
----
-
-## License
-
-MIT License. See [LICENSE](LICENSE).
-
----
+MIT License - see [LICENSE](LICENSE).
 
 ## Disclaimer
 
-This project is provided for legitimate network administration, diagnostics, inventory, and authorized security testing.
-
-You are responsible for ensuring that your use of Nmap and this toolkit complies with applicable laws, organizational policies, contracts, and authorization requirements.
+For legitimate network administration, diagnostics, inventory and authorized security testing. You are
+responsible for complying with applicable laws, policies, contracts and authorization requirements.

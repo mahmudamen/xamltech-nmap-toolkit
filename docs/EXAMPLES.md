@@ -1,68 +1,44 @@
 # Examples
 
-## Example 1: Home/Lab Network Discovery
-
 ```bash
-./nmap-toolkit.sh \
-  --target 192.168.1.0/24 \
-  --profile discovery
+# Guided, colorful menu
+./nmap-toolkit.sh
+
+# Inventory a LAN, then drill into what's there
+./nmap-toolkit.sh -t 192.168.1.0/24 -p recon --open
+./nmap-toolkit.sh -t 192.168.1.0/24 -p inventory --sudo        # + OS detection and traceroute
+
+# Odoo / POS estates (XamlTech specials)
+./nmap-toolkit.sh -t erp.example.com -p odoo                   # version, DB manager/list exposure, TLS, PG exposure
+./nmap-toolkit.sh -t 10.20.0.0/24 -p pos                       # ESC/POS printers, CUPS/IPP, Odoo POS ports
+./nmap-toolkit.sh -t 10.20.0.5 -p odoo --scripts http-security-headers
+
+# Targeted service reviews
+./nmap-toolkit.sh -t 10.0.0.5 -p tls --ports 443,8443
+./nmap-toolkit.sh -t 10.0.0.0/24 -p smb
+./nmap-toolkit.sh -t 10.0.0.0/24 -p db                         # exposed MySQL/PostgreSQL/Redis/MongoDB...
+
+# Gentle on fragile devices
+./nmap-toolkit.sh -t 10.0.0.50 -p polite --max-rate 20
+
+# Safe vulnerability checks (low impact) vs broader (asks confirmation)
+./nmap-toolkit.sh -t 10.0.0.5 -p vuln-safe
+./nmap-toolkit.sh -t 10.0.0.5 -p vuln
+
+# Strict scope, non-interactive (cron / CI)
+./nmap-toolkit.sh -t 10.0.0.0/24 -p audit --scope scope.txt -y --no-color --formats json,html
+
+# Preview without sending a packet
+./nmap-toolkit.sh -t 10.0.0.0/24 -p audit --dry-run
+
+# Weekly drift check
+./nmap-toolkit.sh -t 10.0.0.0/24 -p recon -y
+./nmap-toolkit.sh --diff results/<last-week> latest
+
+# Browse NSE
+./nmap-toolkit.sh --list-scripts ssl
+./nmap-toolkit.sh --script-help ssl-enum-ciphers
+
+# Target-less LAN broadcast discovery (rogue DHCP, UPnP, mDNS)
+./nmap-toolkit.sh -p broadcast --sudo
 ```
-
-Inspect:
-
-```bash
-cat results/*/hosts-up.txt
-```
-
-## Example 2: Router Inventory
-
-```bash
-./nmap-toolkit.sh \
-  --target 192.168.1.1 \
-  --profile standard
-```
-
-## Example 3: Administrator OS Inventory
-
-```bash
-sudo ./nmap-toolkit.sh \
-  --target 192.168.1.10 \
-  --profile os
-```
-
-## Example 4: Diagnostic Discovery
-
-```bash
-./nmap-toolkit.sh \
-  --target 192.168.1.0/24 \
-  --profile diagnostic
-```
-
-## Example 5: CI-Friendly Discovery
-
-```bash
-./nmap-toolkit.sh \
-  --target 192.168.1.0/24 \
-  --profile discovery \
-  --yes \
-  --output ./artifacts/network
-```
-
-## Example 6: Custom Authorized Scan
-
-```bash
-./nmap-toolkit.sh \
-  --target 192.168.1.10 \
-  --profile custom \
-  --args "-sV --top-ports 100"
-```
-
-## Reading XML
-
-The result file:
-
-```text
-results/<timestamp>/nmap.xml
-```
-
-can be processed by Python, Go, JavaScript, CI systems, or inventory/reporting tools.

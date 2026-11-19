@@ -1,0 +1,22 @@
+# XamlTech Nmap Toolkit configuration (KEY=value, one per line).
+# Copy to one of (later files override earlier ones):
+#   /etc/xamltech-nmap-toolkit.conf
+#   ~/.config/xamltech-nmap-toolkit/config
+#   ./.xamltech-nmap.conf
+#   or pass --config FILE
+# Values are read as plain data - they are never executed by the shell.
+# Command-line flags always win over this file.
+
+OUTPUT_DIR=./results
+THEME=cyber                 # cyber | ocean | sunset | matrix | aurora | mono
+REPORT_FORMATS=json,csv,md,html
+# COLOR_MODE=auto           # auto | always | never
+# TIMING=3                  # default Nmap timing template 0-5
+# MAX_RATE=500              # packets/second ceiling
+# MAX_RETRIES=2
+# HOST_TIMEOUT=10m
+# DNS_SERVERS=192.168.1.1
+# SCOPE_FILE=/etc/xamltech-scope.txt   # refuse targets outside this list
+PING_LATENCY=1              # 1 = parallel ping latency table, 0 = off
+OPEN_REPORT=0               # 1 = open report.html when a scan finishes
+NOTIFY=0                    # 1 = terminal bell + desktop notification
