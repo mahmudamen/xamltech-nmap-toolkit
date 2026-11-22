@@ -1,7 +1,42 @@
-# Generated scan results
+# Generated scan results and reports
 results/
 network-audit/
 artifacts/
+**/report.json
+**/report.html
+**/report.md
+**/report.csv
+**/report.sarif
+**/service.html
+**/projects.html
+**/timeline.html
+**/warnings.html
+**/project.json
+**/metadata.json
+**/command.txt
+**/nmap.txt
+**/nmap.xml
+**/nmap.gnmap
+**/hosts.csv
+**/services.csv
+**/findings.csv
+**/diff-vs-previous.txt
+*.gnmap
+
+# Local configuration, sample data overrides and secrets
+.env
+.env.*
+!.env.example
+config/xamltech-nmap.conf
+config/scope.txt
+config/projects/*.json
+!config/projects/sample-assessment.json
+config/mongo/*.json
+!config/mongo/sample-assessment.json
+*.pem
+*.key
+*.p12
+*.pfx
 
 # Editor / OS
 .vscode/

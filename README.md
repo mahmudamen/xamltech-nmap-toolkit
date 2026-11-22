@@ -7,8 +7,6 @@ change detection and shareable HTML reports.**
 
 `Bash` · `Nmap` · `NSE` · `Python (stdlib)` · `Linux` · `MIT`
 
-![terminal](docs/assets/terminal-recon.png)
-
 </div>
 
 > **Authorization required.** Use this project only against systems and networks you own or are explicitly
@@ -21,7 +19,7 @@ change detection and shareable HTML reports.**
 | | v1 | **v2** |
 |---|---|---|
 | Interface | prompts | gradient headline, 6 themes, arrow-key menus, live progress bar, colorized Nmap output |
-| Profiles | 7 | **33** + multi-stage `recon` / `inventory` workflows |
+| Profiles | 7 | **32** + multi-stage `recon` / `inventory` workflows |
 | NSE | none | validated script packs (web, TLS, SSH, SMB, DB, mail, RDP, FTP, network, IoT, audit) |
 | Output | `.txt` + `.xml` | + `.gnmap`, **JSON, CSV, Markdown, self-contained HTML**, findings with severity |
 | Change detection | - | automatic diff against the previous run, `--diff`, `--history` |
@@ -29,8 +27,6 @@ change detection and shareable HTML reports.**
 | Unprivileged use | SYN scans fail | automatic, reported fallback to TCP-connect |
 | Projects | one-off scans | named projects with goals, ordered plan steps, resume and scan timeline |
 | Tests | ShellCheck only | 358 automated checks, incl. live localhost scans, SPA API checks and hostile-banner injection tests |
-
-![report](docs/assets/html-report.png)
 
 ## Install
 
