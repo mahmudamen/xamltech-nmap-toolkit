@@ -21,8 +21,11 @@ absent()   { local name="$1" hay="$2" needle="$3"; if grep -qF -- "$needle" <<< 
 
 echo "== static"
 for f in "$TK" "$ROOT"/lib/*.sh "$ROOT"/install.sh; do check "bash -n $(basename "$f")" bash -n "$f"; done
-check "python compiles" python3 -I -c "import ast,sys; ast.parse(open('$RPT').read())"
+check "python compiles" python3 -I -c "import ast,sys; [ast.parse(open(p).read()) for p in sys.argv[1:]]" "$RPT" "$ROOT/lib/projects.py"
 if command -v shellcheck >/dev/null; then check "shellcheck (warning level)" shellcheck -x -S warning "$TK" "$ROOT"/lib/*.sh "$ROOT/install.sh"; else skip "shellcheck not installed"; fi
+"$ROOT/install.sh" --prefix "$TMP/install" >/dev/null 2>&1
+check "install ships project engine" test -s "$TMP/install/share/xamltech-nmap-toolkit/lib/projects.py"
+check "install ships sample project" test -s "$TMP/install/share/xamltech-nmap-toolkit/config/projects/sample-assessment.json"
 
 echo "== cli basics"
 contains "--version" "$("$TK" --version)" "2."
@@ -297,6 +300,51 @@ if command -v nmap >/dev/null; then
     out="$(T --export urls latest)"; contains "live export urls" "$out" "http://127.0.0.1:$port"
 else
     skip "nmap not installed - live integration skipped"
+fi
+
+echo "== projects"
+export XAMLTECH_NMAP_PROJECTS_DIR="$TMP/projects"
+mkdir -p "$XAMLTECH_NMAP_PROJECTS_DIR"
+out="$(T --project-create cli-lab --project-info 'Authorized lab' --project-goals 'Inventory hosts,Review ports' 2>&1)"
+contains "project create" "$out" "Created project cli-lab"
+out="$(T --project-step-add cli-lab --project-step discover --goal 'Find hosts' --project-args '-t 127.0.0.1 -p discovery' 2>&1)"
+contains "project step add" "$out" "Added step discover"
+out="$(T --project-step-add cli-lab --project-step ports --goal 'Find ports' 2>&1)"
+contains "project second step add" "$out" "Added step ports"
+out="$(T --project-show cli-lab 2>&1)"
+contains "project show lists plan" "$out" "1. discover [todo] Find hosts"
+contains "project show orders plan" "$out" "2. ports [todo] Find ports"
+contains "project show next action" "$out" "Next action: discover"
+out="$(T --project-resume cli-lab -y --dry-run 2>&1)"
+contains "project resume loads saved args" "$out" "Profile        discovery"
+contains "project resume keeps project" "$out" "Project        cli-lab"
+out="$(T --project-step-status cli-lab discover=done --note 'Hosts found' 2>&1)"
+contains "project step status" "$out" "discover: done"
+out="$(T --project-show cli-lab 2>&1)"
+contains "project advances next action" "$out" "Next action: ports"
+out="$(T --project-list 2>&1)"
+contains "project list shows status" "$out" "cli-lab"
+contains "project sample bundled" "$(T --project-show sample-assessment 2>&1)" "Next action: discover"
+check_not "project rejects hostile name" "$TK" --no-color --no-banner --project-create '../escape' --project-info x
+out="$(T --project-step-status cli-lab ports=needs-action --note 'Waiting for operator' 2>&1)"
+contains "project needs-action status" "$out" "ports: needs-action"
+
+if [[ -f "$FIX/sample-vuln.xml" ]]; then
+    report_dir="$TMP/project-report"; mkdir -p "$report_dir"
+    cp "$FIX/sample-vuln.xml" "$report_dir/nmap.xml"
+    XAMLTECH_PROJECT_ARGV=$'-t\n127.0.0.1\n-p\ndiscovery' \
+        python3 -I "$ROOT/lib/projects.py" record-scan cli-lab \
+        --run "$report_dir" --profile discovery --targets 127.0.0.1 \
+        --status 'done' --step discover >/dev/null
+    python3 -I "$ROOT/lib/projects.py" summary cli-lab > "$report_dir/project.json"
+    python3 -I "$RPT" report --xml "$report_dir/nmap.xml" --outdir "$report_dir" --formats md,html >/dev/null 2>&1
+    contains "markdown has project summary" "$(<"$report_dir/report.md")" "## Project"
+    contains "markdown has plan order" "$(<"$report_dir/report.md")" "1 | discover | done"
+    contains "markdown has timeline header" "$(<"$report_dir/report.md")" "Scan timeline (in order)"
+    contains "html has project section" "$(<"$report_dir/report.html")" "<h2>Project</h2>"
+    contains "dashboard has project section" "$(python3 -I "$RPT" dashboard "$report_dir/report.json")" "Project"
+else
+    skip "project report integration (fixture missing)"
 fi
 
 echo

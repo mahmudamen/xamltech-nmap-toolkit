@@ -4,7 +4,7 @@ test:
 lint:
 	@if command -v shellcheck >/dev/null 2>&1; then shellcheck -x -S warning nmap-toolkit.sh lib/*.sh install.sh tests/run.sh; else printf 'shellcheck not installed; skipping\n'; fi
 	bash tests/test_shellcheck.sh
-	python3 -m py_compile lib/report.py
+	python3 -m py_compile lib/report.py lib/projects.py
 install:
 	./install.sh
 user-install:

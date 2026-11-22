@@ -12,6 +12,19 @@ complete -c xamltech-nmap -l target-group -d Expand\ a\ named\ target\ group
 complete -c xamltech-nmap -l save-preset -d Save\ current\ options\ as\ a\ named\ JSON\ preset
 complete -c xamltech-nmap -l preset -d Load\ options\ from\ a\ named\ JSON\ preset
 complete -c xamltech-nmap -l replay -d Replay\ a\ numbered\ command\ from\ history
+complete -c xamltech-nmap -l project -d Associate\ this\ scan\ with\ a\ project
+complete -c xamltech-nmap -l project-create -d Create\ a\ named\ project
+complete -c xamltech-nmap -l project-info -d Description\ for\ a\ new\ project
+complete -c xamltech-nmap -l project-goals -d Comma\ separated\ goals\ for\ a\ new\ project
+complete -c xamltech-nmap -l project-list -d List\ projects\ with\ their\ status
+complete -c xamltech-nmap -l project-show -d Show\ project\ plan\,\ timeline\ and\ next\ action
+complete -c xamltech-nmap -l project-step-add -d Add\ an\ ordered\ step\ to\ a\ project
+complete -c xamltech-nmap -l project-step -d Step\ id\ for\ --project-step-add
+complete -c xamltech-nmap -l goal -d Goal\ text\ for\ --project-step-add
+complete -c xamltech-nmap -l project-args -d Saved\ toolkit\ arguments\ for\ the\ step
+complete -c xamltech-nmap -l project-step-status -d Set\ step\ status:\ NAME\ STEP=STATUS
+complete -c xamltech-nmap -l note -d Note\ for\ --project-step-status
+complete -c xamltech-nmap -l project-resume -d Resume\ the\ next\ project\ step\ and\ its\ saved\ arguments
 complete -c xamltech-nmap -l estimate -d Estimate\ hosts\,\ stages\ and\ duration
 complete -c xamltech-nmap -l profile -d Scan\ profile\ name
 complete -c xamltech-nmap -s p -d Scan\ profile\ name

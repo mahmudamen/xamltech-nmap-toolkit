@@ -8,6 +8,7 @@ START_EPOCH=0
 STAGE_FILES=()
 STAGE_SKIPPED=()
 PREV_REPORT=""
+SCAN_STATUS="done"
 
 # py_report SUBCOMMAND ARGS...  (adds --color to terminal-facing views when enabled)
 py_report() {
@@ -204,6 +205,7 @@ show_plan() {
     section "Scan plan"
     kv "Target"  "$(target_display)"
     kv "Profile" "$PROFILE  ($(profile_desc "$PROFILE" 2>/dev/null || echo custom))"
+    [[ -z "${PROJECT_NAME:-}" ]] || kv "Project" "$PROJECT_NAME"
     local risk; risk="$(profile_risk "$PROFILE" 2>/dev/null || echo safe)"
     kv "Risk"    "$(risk_badge "$risk")" ""
     kv "Privileges" "$( ((NMAP_PRIVILEGED)) && echo 'raw sockets available' || echo 'unprivileged (TCP-connect mode)' )" \
@@ -302,6 +304,7 @@ run_scan() {
     run_nmap nmap "${tgt[@]}" || rc=$?
     if (( rc != 0 )); then
         error "Nmap exited with status $rc"
+        SCAN_STATUS="failed"
         post_process "nmap" || true
         audit_log "$rc" "$cmd_display" "${PLAN_HASH:-}"
         fix_ownership
@@ -617,6 +620,13 @@ post_process() {
     if have_py && [[ "$REPORT_FORMATS" == *html* && -f "$RUN_DIR/report.html" ]]; then
         kv "HTML report" "$RUN_DIR/report.html" "$C_ACCENT"
     fi
+    if [[ -n "${PROJECT_NAME:-}" ]]; then
+        local project_step=""
+        project_step="$(project_active_step "$PROJECT_NAME" 2>/dev/null || true)"
+        project_record_scan "$SCAN_STATUS" "$RUN_DIR" "$PROFILE" "${TARGETS[*]:-}" \
+            "$PROJECT_NAME" "$project_step"
+    fi
+    SCAN_STATUS="done"
     fix_ownership
     finish_hooks
 }

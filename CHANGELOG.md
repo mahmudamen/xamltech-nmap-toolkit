@@ -1,5 +1,23 @@
 # Changelog
 
+## [2.2.0] - 2026-11-22
+
+### Added
+- Named projects with goals, ordered plan steps, `done` / `failed` / `needs-action` statuses, notes and
+  saved toolkit arguments per step. Storage is `0600` JSON under `XDG_CONFIG_HOME/xamltech-nmap-toolkit/projects`
+  (override with `XAMLTECH_NMAP_PROJECTS_DIR`); a bundled `sample-assessment` project is included.
+- `--project-resume NAME`: expands the next unfinished step's saved arguments and workflow resume path, then
+  applies the normal scope, authorization and policy gates before any scan runs.
+- Project summary in `report.json`, `report.md`, `report.html` and the terminal dashboard, including goals,
+  ordered plan, scan timeline, status counts and the next action.
+- New CLI: `--project`, `--project-create`, `--project-info`, `--project-goals`, `--project-list`,
+  `--project-show`, `--project-step-add`, `--project-step`, `--goal`, `--project-args`,
+  `--project-step-status`, `--note`, `--project-resume`.
+
+### Changed
+- Version is now `2.2.0`; existing flags, exit codes and report layout remain backward compatible (the report
+  gains an additive `project` key). Test suite grew to 305 checks.
+
 ## [2.1.1] - 2026-11-22
 
 ### Added

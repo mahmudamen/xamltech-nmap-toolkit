@@ -24,11 +24,11 @@ TOOLKIT_HOME="${XAMLTECH_NMAP_HOME:-$(dirname "$SCRIPT_PATH")}"
 LIB_DIR="$TOOLKIT_HOME/lib"
 SCRIPTS_DIR="$TOOLKIT_HOME/scripts"
 readonly SCRIPT_PATH TOOLKIT_HOME LIB_DIR SCRIPTS_DIR
-SCRIPT_VERSION="$(python3 -I "$LIB_DIR/report.py" version 2>/dev/null || printf '2.1.1')"
+SCRIPT_VERSION="$(python3 -I "$LIB_DIR/report.py" version 2>/dev/null || printf '2.2.0')"
 readonly SCRIPT_VERSION
 ORIGINAL_ARGS=("$@")
 
-for _lib in options ui core nse profiles scan interactive; do
+for _lib in options ui core nse profiles projects scan interactive; do
     [[ -r "$LIB_DIR/$_lib.sh" ]] || { echo "xamltech-nmap-toolkit: missing $LIB_DIR/$_lib.sh" >&2; exit 3; }
     # shellcheck source=/dev/null
     source "$LIB_DIR/$_lib.sh"
@@ -65,6 +65,14 @@ PLAN_FILE=""
 PLAN_HASH_EXPECTED=""
 PLAN_JSON=""
 PLAN_HASH=""
+PROJECT_NAME=""
+PROJECT_INFO=""
+PROJECT_GOALS=""
+PROJECT_STEP=""
+PROJECT_STATUS=""
+PROJECT_NOTE=""
+PROJECT_ARGS=""
+PROJECT_GOAL_TEXT=""
 
 # ---------- help ----------
 
@@ -212,6 +220,23 @@ parse_args() {
             --save-preset)    need_val "$1" $#; shift 2 ;;
             --preset)         need_val "$1" $#; shift 2 ;;
             --replay)         need_val "$1" $#; shift 2 ;;
+            --project)        need_val "$1" $#; PROJECT_NAME="$2"; shift 2 ;;
+            --project-create) need_val "$1" $#; ACTION=project-create; PROJECT_NAME="$2"; shift 2 ;;
+            --project-info)   need_val "$1" $#; PROJECT_INFO="$2"; shift 2 ;;
+            --project-goals)  need_val "$1" $#; PROJECT_GOALS="$2"; shift 2 ;;
+            --project-list)   ACTION=project-list; shift ;;
+            --project-show)   need_val "$1" $#; ACTION=project-show; PROJECT_NAME="$2"; shift 2 ;;
+            --project-step-add) need_val "$1" $#; ACTION=project-step-add; PROJECT_NAME="$2"; shift 2 ;;
+            --project-step)   need_val "$1" $#; PROJECT_STEP="$2"; shift 2 ;;
+            --goal)           need_val "$1" $#; PROJECT_GOAL_TEXT="$2"; shift 2 ;;
+            --project-args)   need_val "$1" $#; PROJECT_ARGS="$2"; shift 2 ;;
+            --project-step-status)
+                [[ $# -ge 3 ]] || die "Missing value for $1"
+                ACTION=project-step-status; PROJECT_NAME="$2"
+                [[ "$3" == *=* ]] || DIE_CODE=2 die "--project-step-status needs STEP=STATUS"
+                PROJECT_STEP="${3%%=*}"; PROJECT_STATUS="${3#*=}"; shift 3 ;;
+            --note)           need_val "$1" $#; PROJECT_NOTE="$2"; shift 2 ;;
+            --project-resume) need_val "$1" $#; PROJECT_NAME="$2"; shift 2 ;;
             --estimate)       ACTION=estimate; shift ;;
             --version)        ACTION=version; shift ;;
             -h|--help)        ACTION=help; shift ;;
@@ -295,6 +320,30 @@ main() {
         done
         (( found )) || break
     done
+    local project_depth=0 pout pname
+    while :; do
+        local project_found=0
+        for (( i = 0; i < ${#argv[@]}; i++ )); do
+            if [[ "${argv[i]}" == --project-resume ]]; then
+                [[ -n "${argv[i+1]:-}" ]] || die "Missing value for --project-resume"
+                pname="${argv[i+1]}"
+                project_depth=$(( project_depth + 1 ))
+                (( project_depth <= 10 )) || die "Project resume expansion too deep"
+                pout="$(project_resume_args "$pname")" || die "Cannot resume project '$pname'"
+                [[ -n "$pout" ]] || die "Project '$pname' has no arguments to resume"
+                local -a pexpanded=()
+                mapfile -t pexpanded <<< "$pout"
+                expanded=()
+                (( i == 0 )) || expanded+=("${argv[@]:0:i}")
+                expanded+=("${pexpanded[@]}")
+                (( i + 1 >= ${#argv[@]} )) || expanded+=("${argv[@]:i+2}")
+                argv=("${expanded[@]}")
+                project_found=1
+                break
+            fi
+        done
+        (( project_found )) || break
+    done
     for (( i = 0; i < ${#argv[@]}; i++ )); do
         if [[ "${argv[i]}" == --replay ]]; then
             [[ -n "${argv[i+1]:-}" ]] || die "Missing value for --replay"
@@ -331,6 +380,22 @@ main() {
     [[ -z "${save_name:-}" ]] || { save_preset "$save_name" "${argv[@]}"; info "Saved preset '$save_name'."; }
 
     parse_args "${argv[@]}"
+    case "$ACTION" in
+        project-create)
+            [[ -n "$PROJECT_INFO" ]] || DIE_CODE=2 die "--project-create requires --project-info"
+            project_create "$PROJECT_NAME" "$PROJECT_INFO" "$PROJECT_GOALS"
+            return 0 ;;
+        project-list)    project_list; return 0 ;;
+        project-show)    project_show "$PROJECT_NAME"; return 0 ;;
+        project-step-add)
+            [[ -n "$PROJECT_STEP" && -n "$PROJECT_GOAL_TEXT" ]] \
+                || DIE_CODE=2 die "--project-step-add requires --project-step and --goal"
+            project_add_step "$PROJECT_NAME" "$PROJECT_STEP" "$PROJECT_GOAL_TEXT" "$PROJECT_ARGS"
+            return 0 ;;
+        project-step-status)
+            project_set_step "$PROJECT_NAME" "$PROJECT_STEP" "$PROJECT_STATUS" "$PROJECT_NOTE"
+            return 0 ;;
+    esac
     if [[ -n "${OVERRIDE_VALUES[--packet-trace]+x}" ]] && (( ! VERBOSE )); then
         DIE_CODE=2 die "--packet-trace requires --verbose."
     fi

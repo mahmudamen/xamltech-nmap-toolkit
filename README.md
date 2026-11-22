@@ -1,6 +1,6 @@
 <div align="center">
 
-# XamlTech Nmap Toolkit  `v2.1.1`
+# XamlTech Nmap Toolkit  `v2.2.0`
 
 **A colorful, scriptable command-line cockpit for Nmap - discovery, 30+ scan profiles, NSE intelligence,
 change detection and shareable HTML reports.**
@@ -27,7 +27,8 @@ change detection and shareable HTML reports.**
 | Change detection | - | automatic diff against the previous run, `--diff`, `--history` |
 | Safety | metachar blocklist | allowlist validation, scope file, typed consent for non-private targets, blocked brute/DoS/exploit NSE, dry-run |
 | Unprivileged use | SYN scans fail | automatic, reported fallback to TCP-connect |
-| Tests | ShellCheck only | 270 automated checks, incl. live scans of localhost and hostile-banner injection tests |
+| Projects | one-off scans | named projects with goals, ordered plan steps, resume and scan timeline |
+| Tests | ShellCheck only | 305 automated checks, incl. live scans of localhost and hostile-banner injection tests |
 
 ![report](docs/assets/html-report.png)
 
@@ -52,6 +53,26 @@ Requirements: Linux, Bash 4.4+, Nmap, standard coreutils. Optional: `python3` (r
 ./nmap-toolkit.sh -t 10.0.0.0/24 -p audit --scope scope.txt --sudo
 ./nmap-toolkit.sh -t 10.0.0.5 -p tls --dry-run           # show the exact Nmap command, run nothing
 ```
+
+## Projects
+
+Group scans into a resumable assessment. A project keeps an ordered plan, goals, step statuses
+(`done` / `failed` / `needs-action`), and the timeline of every scan associated with it.
+
+```bash
+./nmap-toolkit.sh --project-create lab --project-info 'Authorized lab' \
+    --project-goals 'Inventory hosts,Review ports'
+./nmap-toolkit.sh --project-step-add lab --project-step discover \
+    --goal 'Find live hosts' --project-args '-t 127.0.0.1 -p discovery'
+./nmap-toolkit.sh --project-resume lab -y                 # runs the next step's saved args
+./nmap-toolkit.sh --project-step-status lab discover=done --note 'Hosts found'
+./nmap-toolkit.sh --project-show lab
+./nmap-toolkit.sh --project-list
+```
+
+`--project-resume` still re-checks scope, authorization and policy before running anything. A bundled
+`sample-assessment` project is available out of the box. The project summary also appears in `report.json`,
+`report.md`, `report.html` and the terminal dashboard.
 
 ## Highlights
 
@@ -99,6 +120,10 @@ Safety    --authorized  --dry-run  --sudo  -y  --scope FILE  --policy advanced -
 Automation --save-preset NAME  --preset NAME  --replay N  --target-group NAME
           --stage discovery|ports|services  --resume RUN_DIR  --estimate
           --incremental baseline/report.json
+Projects  --project NAME  --project-create NAME  --project-info TEXT  --project-goals CSV
+          --project-list  --project-show NAME  --project-step-add NAME
+          --project-step ID  --goal TEXT  --project-args ARGS
+          --project-step-status NAME STEP=STATUS  --note TEXT  --project-resume NAME
 Tools     --list-profiles  --history  --diff A B  --open-report  --export KIND
           --doctor  --check-updates [--online]  --config FILE  --dump-options
 ```

@@ -15,6 +15,19 @@ Generated from `lib/options.sh` by `make docs`. Do not edit by hand.
 | \`--save-preset\` | str | safe | no | Save current options as a named JSON preset |
 | \`--preset\` | str | safe | no | Load options from a named JSON preset |
 | \`--replay\` | str | safe | no | Replay a numbered command from history |
+| \`--project\` | str | safe | no | Associate this scan with a project |
+| \`--project-create\` | str | safe | no | Create a named project |
+| \`--project-info\` | str | safe | no | Description for a new project |
+| \`--project-goals\` | str | safe | no | Comma separated goals for a new project |
+| \`--project-list\` | none | safe | no | List projects with their status |
+| \`--project-show\` | str | safe | no | Show project plan, timeline and next action |
+| \`--project-step-add\` | str | safe | no | Add an ordered step to a project |
+| \`--project-step\` | str | safe | no | Step id for --project-step-add |
+| \`--goal\` | str | safe | no | Goal text for --project-step-add |
+| \`--project-args\` | str | safe | no | Saved toolkit arguments for the step |
+| \`--project-step-status\` | str | safe | no | Set step status: NAME STEP=STATUS |
+| \`--note\` | str | safe | no | Note for --project-step-status |
+| \`--project-resume\` | str | safe | no | Resume the next project step and its saved arguments |
 | \`--estimate\` | none | safe | no | Estimate hosts, stages and duration |
 | \`--profile\`, \`-p\` | str | safe | no | Scan profile name |
 | \`--args\`, \`-a\` | str | moderate | no | Quote-aware arguments for the custom profile |

@@ -1,0 +1,42 @@
+{
+  "schema_version": 1,
+  "name": "sample-assessment",
+  "info": "Bundled example project: inventory the local lab, review exposures and track remediation actions. Copy it with --project-resume to start where the plan left off.",
+  "goals": [
+    "Inventory live hosts and open ports",
+    "Review findings from the exposure scan",
+    "Record remediation work as needs-action steps"
+  ],
+  "steps": [
+    {
+      "id": "discover",
+      "goal": "Discover live hosts in the lab",
+      "status": "todo",
+      "note": "",
+      "run": "",
+      "argv": ["-t", "127.0.0.1", "-p", "discovery"],
+      "updated": "2026-11-22T00:00:00+00:00"
+    },
+    {
+      "id": "expose",
+      "goal": "Scan live hosts for exposed services",
+      "status": "todo",
+      "note": "",
+      "run": "",
+      "argv": ["-t", "127.0.0.1", "-p", "recon"],
+      "updated": "2026-11-22T00:00:00+00:00"
+    },
+    {
+      "id": "remediate",
+      "goal": "Review findings and record remediation actions",
+      "status": "needs-action",
+      "note": "Waiting for an operator to triage the findings.",
+      "run": "",
+      "argv": [],
+      "updated": "2026-11-22T00:00:00+00:00"
+    }
+  ],
+  "scans": [],
+  "created": "2026-11-22T00:00:00+00:00",
+  "updated": "2026-11-22T00:00:00+00:00"
+}

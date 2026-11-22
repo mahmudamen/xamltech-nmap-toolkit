@@ -32,7 +32,7 @@ import threading
 import xml.etree.ElementTree as ET
 from collections import Counter, OrderedDict
 
-VERSION = "2.1.1"
+VERSION = "2.2.0"
 SEVERITIES = ["CRITICAL", "HIGH", "MEDIUM", "LOW", "INFO"]
 SEV_RANK = {s: i for i, s in enumerate(SEVERITIES)}
 # Odoo majors older than this are reported as likely out of support (edit to taste).
@@ -428,6 +428,96 @@ def read_latency(path):
     return out
 
 
+def load_project_summary(outdir):
+    path = os.path.join(outdir, "project.json")
+    if not os.path.isfile(path):
+        return None
+    try:
+        with open(path, encoding="utf-8") as fh:
+            data = json.load(fh)
+    except (OSError, ValueError):
+        return None
+    return data if isinstance(data, dict) else None
+
+
+def project_markdown(project):
+    if not project:
+        return []
+    nxt = project.get("next_action") or {}
+    lines = ["## Project", "", f"- **Project:** {md_safe(project.get('name', ''))} ({md_safe(project.get('status', ''))})",
+             f"- **Info:** {md_safe(project.get('info', ''))}",
+             f"- **Next action:** {md_safe(nxt.get('step', 'none'))} {md_safe(nxt.get('goal', ''))}", ""]
+    if project.get("goals"):
+        lines += ["### Goals", ""]
+        lines += [f"- {md_safe(goal)}" for goal in project["goals"]]
+        lines.append("")
+    if project.get("plan"):
+        lines += ["### Plan (in order)", "", "| # | Step | Status | Goal | Note |", "|---|---|---|---|---|"]
+        for item in project["plan"]:
+            lines.append(f"| {item.get('order', '')} | {md_safe(item.get('id', ''))} | "
+                         f"{md_safe(item.get('status', ''))} | {md_safe(item.get('goal', ''))} | "
+                         f"{md_safe(item.get('note', ''))} |")
+        lines.append("")
+    if project.get("timeline"):
+        lines += ["### Scan timeline (in order)", "", "| # | Started | Profile | Status | Targets | Run |", "|---|---|---|---|---|---|"]
+        for item in project["timeline"]:
+            lines.append(f"| {item.get('order', '')} | {md_safe(item.get('started', ''))} | "
+                         f"{md_safe(item.get('profile', ''))} | {md_safe(item.get('status', ''))} | "
+                         f"{md_safe(item.get('targets', ''))} | {md_safe(item.get('run', ''))} |")
+        lines.append("")
+    return lines
+
+
+def project_html(project):
+    if not project:
+        return ""
+    nxt = project.get("next_action") or {}
+    parts = ["<h2>Project</h2>", '<div class="cards">']
+    for k, v in (("Project", f"{project.get('name', '')} ({project.get('status', '')})"),
+                 ("Next", f"{nxt.get('step', 'none')} {nxt.get('goal', '')}"),
+                 ("Plan", f"{sum(1 for s in project.get('plan', []) if s.get('status') == 'done')}/{len(project.get('plan', []))}"),
+                 ("Scans", len(project.get("timeline", [])))):
+        if v:
+            parts.append(f'<div class="card"><b>{esc(v)}</b><span>{esc(k)}</span></div>')
+    parts.append("</div>")
+    if project.get("goals"):
+        parts.append("<h3>Goals</h3><ul>" + "".join(f"<li>{esc(g)}</li>" for g in project["goals"]) + "</ul>")
+    if project.get("plan"):
+        rows = "".join(f'<tr><td>{esc(i.get("order", ""))}</td><td class="mono">{esc(i.get("id", ""))}</td>'
+                       f'<td>{esc(i.get("status", ""))}</td><td>{esc(i.get("goal", ""))}</td>'
+                       f'<td class="mut">{esc(i.get("note", ""))}</td></tr>' for i in project["plan"])
+        parts.append('<table><thead><tr><th>#</th><th>Step</th><th>Status</th><th>Goal</th><th>Note</th></tr></thead>'
+                     f"<tbody>{rows}</tbody></table>")
+    if project.get("timeline"):
+        rows = "".join(f'<tr><td>{esc(i.get("order", ""))}</td><td>{esc(i.get("started", ""))}</td>'
+                       f'<td class="mono">{esc(i.get("profile", ""))}</td><td>{esc(i.get("status", ""))}</td>'
+                       f'<td>{esc(i.get("targets", ""))}</td><td class="mono">{esc(i.get("run", ""))}</td></tr>'
+                       for i in project["timeline"])
+        parts.append('<h3>Scan timeline</h3><table><thead><tr><th>#</th><th>Started</th><th>Profile</th>'
+                     f"<th>Status</th><th>Targets</th><th>Run</th></tr></thead><tbody>{rows}</tbody></table>")
+    return "".join(parts)
+
+
+def project_dashboard(project, term):
+    if not project:
+        return []
+    nxt = project.get("next_action") or {}
+    out = [term.head("Project")]
+    line = f"{project.get('name', '')}  [{project.get('status', '')}]  "
+    counts = project.get("counts") or {}
+    line += " ".join(f"{k}={v}" for k, v in counts.items())
+    out.append("  " + term.s("1", line))
+    out.append("  " + term.s("38;5;245", f"Next: {nxt.get('step', 'none')} {nxt.get('goal', '')}"))
+    for item in project.get("plan", [])[:8]:
+        mark = "x" if item.get("status") == "done" else "!"
+        out.append(f"  {term.s('38;5;84' if mark == 'x' else '38;5;214', mark)} "
+                   f"{item.get('order', ''):>2}. {item.get('id', '')}  {str(item.get('goal', ''))[:max(20, term.w - 30)]}")
+    for item in project.get("timeline", [])[-3:]:
+        out.append("  " + term.s("38;5;245", f"{item.get('started', '')} {item.get('profile', '')} "
+                                             f"[{item.get('status', '')}] {item.get('targets', '')}"))
+    return out
+
+
 # ---- safe writers ---------------------------------------------------------- #
 def csv_safe(v):
     s = "" if v is None else str(v)
@@ -476,6 +566,7 @@ def write_markdown(rep, outdir):
     L += ["## Summary", "", "| Hosts up | Open ports | Services | Critical | High | Medium | Low |", "|---|---|---|---|---|---|---|",
           f"| {st['hosts_up']}/{st['hosts_total']} | {st['open_ports']} | {len(st['services'])} | "
           f"{st['findings']['CRITICAL']} | {st['findings']['HIGH']} | {st['findings']['MEDIUM']} | {st['findings']['LOW']} |", ""]
+    L += project_markdown(rep.get("project"))
     if rep["findings"]:
         L += ["## Findings", "", "> Heuristic hints derived from scan data - verify before acting.", "",
               "| Rule | Severity | Host | Port | Finding | Recommendation |", "|---|---|---|---|---|---|"]
@@ -554,6 +645,7 @@ footer{color:var(--mut);font-size:12.5px;margin-top:40px;border-top:1px solid va
 <p>__SUBTITLE__</p><div class="chips">__CHIPS__</div></header>
 <main>
 <div class="cards">__CARDS__</div>
+__PROJECT__
 <h2>Findings by severity</h2>__SEVBAR__
 <h2>Findings</h2>
 <div class="toolbar" id="sevfilter">__SEVBUTTONS__</div>
@@ -697,6 +789,7 @@ def write_html(rep, outdir, diff=None):
             .replace("__TITLE__", esc(meta.get("targets", "")))
             .replace("__SUBTITLE__", esc(f"{meta.get('profile', 'scan')} profile · {rep['generated']}"))
             .replace("__CHIPS__", chips).replace("__CARDS__", cards)
+            .replace("__PROJECT__", project_html(rep.get("project")))
             .replace("__SEVBAR__", bar + legend).replace("__SEVBUTTONS__", buttons)
             .replace("__FINDINGS__", findings).replace("__DIFF__", html_diff(diff)).replace("__PRESCRIPTS__", pre)
             .replace("__HOSTS__", "".join(hosts_html) or '<p class="mut">No hosts to display.</p>')
@@ -743,6 +836,7 @@ def dashboard(rep, term):
              ("SERVICES", len(st["services"]), "38;5;177"), ("FINDINGS", sum(st["findings"].values()), "38;5;214"),
              ("DURATION", f"{int(rep['scan']['elapsed'])}s", "38;5;245")]
     out.append("  " + "    ".join(term.s("38;5;245", k) + " " + term.s("1;" + c, v) for k, v, c in tiles))
+    out += project_dashboard(rep.get("project"), term)
 
     fnd = st["findings"]
     if sum(fnd.values()):
@@ -1239,6 +1333,7 @@ def cmd_report(a):
             meta["command"] = cf.read().strip()
     rep = build_report(a.xml, meta, read_latency(a.latency))
     os.makedirs(a.outdir, exist_ok=True)
+    rep["project"] = load_project_summary(a.outdir)
     rep["integrity"] = {"native_sha256": {os.path.basename(p): file_sha256(p) for p in a.xml if os.path.isfile(p)}}
     if getattr(a, "baseline", None):
         apply_baseline(rep, load_baseline(a.baseline))
