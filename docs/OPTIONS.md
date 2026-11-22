@@ -45,7 +45,8 @@ Generated from `lib/options.sh` by `make docs`. Do not edit by hand.
 | \`--formats\` | csv | safe | no | Report formats |
 | \`--theme\` | str | safe | no | Color theme |
 | \`--no-latency\` | none | safe | no | Skip the parallel ping latency table |
-| \`--open\` | none | safe | no | Open the HTML report when done |
+| \`--open\` | none | safe | no | Open the service page when done (default) |
+| \`--no-open\` | none | safe | no | Do not open a browser when reports finish |
 | \`--notify\` | none | safe | no | Bell or desktop notification when done |
 | \`--no-color\` | none | safe | no | Force colors off |
 | \`--color\` | none | safe | no | Force colors on |
@@ -125,7 +126,7 @@ Generated from `lib/options.sh` by `make docs`. Do not edit by hand.
 | \`--script-help\` | str | safe | no | Show NSE script documentation |
 | \`--history\` | none | safe | no | List previous runs |
 | \`--diff\` | str | safe | no | Compare two runs |
-| \`--open-report\` | str | safe | no | Open an HTML report |
+| \`--open-report\` | str | safe | no | Open the service page or HTML report |
 | \`--export\` | str | safe | no | Handoff list (urls, hosts, ports, openvas) |
 | \`--doctor\` | none | safe | no | Check the environment |
 | \`--check-updates\` | none | safe | no | Nmap version information |

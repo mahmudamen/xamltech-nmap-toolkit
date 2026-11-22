@@ -335,6 +335,12 @@ def cmd_summary(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_summaries(args: argparse.Namespace) -> int:
+    data = [summary(load_project(name)) for name in all_projects()]
+    print(json.dumps(data, indent=2, sort_keys=True))
+    return 0
+
+
 def cmd_add_step(args: argparse.Namespace) -> int:
     project = load_project(args.name)
     step_id = check_step(args.step)
@@ -427,6 +433,8 @@ def build_parser() -> argparse.ArgumentParser:
     p = sub.add_parser("summary")
     p.add_argument("name")
     p.set_defaults(func=cmd_summary)
+    p = sub.add_parser("summaries")
+    p.set_defaults(func=cmd_summaries)
     p = sub.add_parser("add-step")
     p.add_argument("name")
     p.add_argument("step")

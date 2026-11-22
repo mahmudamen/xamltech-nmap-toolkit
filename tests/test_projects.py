@@ -56,6 +56,15 @@ class ProjectTests(unittest.TestCase):
         self.assertEqual(data["status"], "in-progress")
         self.assertIsNone(data["next_action"])
 
+    def test_summaries_lists_every_project(self):
+        self.make_project()
+        self.assertEqual(self.run_cli("create", "lab2", "--info", "Second lab")[0], 0)
+        code, out, _ = self.run_cli("summaries")
+        data = json.loads(out)
+        self.assertEqual(code, 0)
+        names = {item["name"] for item in data}
+        self.assertTrue({"lab", "lab2"}.issubset(names))
+
     def test_plan_order_and_next_action(self):
         self.make_project()
         self.run_cli("add-step", "lab", "discover", "--goal", "Find hosts", "--project-args", "-t 127.0.0.1 -p discovery")

@@ -18,5 +18,5 @@ REPORT_FORMATS=json,csv,md,html
 # DNS_SERVERS=192.168.1.1
 # SCOPE_FILE=/etc/xamltech-scope.txt   # refuse targets outside this list
 PING_LATENCY=1              # 1 = parallel ping latency table, 0 = off
-OPEN_REPORT=0               # 1 = open report.html when a scan finishes
+OPEN_REPORT=1               # 1 = open service.html when a scan finishes
 NOTIFY=0                    # 1 = terminal bell + desktop notification

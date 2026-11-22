@@ -30,6 +30,14 @@ check "install ships sample project" test -s "$TMP/install/share/xamltech-nmap-t
 echo "== cli basics"
 contains "--version" "$("$TK" --version)" "2."
 contains "--help lists --export" "$("$TK" --no-color --help)" "--export"
+contains "--help lists --no-open" "$("$TK" --no-color --help)" "--no-open"
+mkdir -p "$TMP/openres/openrun" "$TMP/bin"
+: > "$TMP/openres/openrun/report.html"; : > "$TMP/openres/openrun/service.html"
+printf '#!/bin/sh\nprintf "%%s\\n" "$1" > "%s/opened"\n' "$TMP" > "$TMP/bin/xdg-open"
+chmod +x "$TMP/bin/xdg-open"
+PATH="$TMP/bin:$PATH" DISPLAY=:99 "$TK" --no-color --no-banner -o "$TMP/openres" --open-report openrun >/dev/null 2>&1
+sleep 0.3
+contains "--open-report opens service page first" "$(<"$TMP/opened")" "service.html"
 out="$(T --list-profiles)"
 for p in discovery quick standard odoo pos audit recon vuln-safe; do contains "profile listed: $p" "$out" "$p"; done
 
@@ -85,8 +93,18 @@ contains "honest user-agent" "$out" "XamlTech-Nmap-Toolkit"
 
 echo "== report engine (fixture)"
 mkdir -p "$TMP/rep"
-python3 -I "$RPT" report --xml "$FIX/sample-vuln.xml" --outdir "$TMP/rep" --formats json,csv,md,html
-for f in report.json hosts.csv services.csv findings.csv report.md report.html; do check "created $f" test -s "$TMP/rep/$f"; done
+python3 -I "$ROOT/lib/projects.py" summaries > "$TMP/rep/projects.json"
+python3 -I "$RPT" report --xml "$FIX/sample-vuln.xml" --outdir "$TMP/rep" --formats json,csv,md,html \
+    --projects-json "$TMP/rep/projects.json"
+for f in report.json hosts.csv services.csv findings.csv report.md report.html service.html projects.html; do check "created $f" test -s "$TMP/rep/$f"; done
+service_html="$(cat "$TMP/rep/service.html")"
+contains "service page links report" "$service_html" 'href="report.html"'
+contains "service page links projects" "$service_html" 'href="projects.html"'
+contains "service page has keyboard focus styles" "$service_html" ':focus-visible'
+contains "service page states run metrics" "$service_html" 'Current run'
+projects_html="$(cat "$TMP/rep/projects.html")"
+contains "projects page links back to service" "$projects_html" 'href="service.html"'
+contains "projects page lists bundled sample" "$projects_html" 'sample-assessment'
 fj="$(cat "$TMP/rep/findings.csv")"
 contains "finding: MS17-010 critical" "$fj" "CRITICAL"
 contains "finding: telnet"            "$fj" "Telnet"
@@ -337,11 +355,16 @@ if [[ -f "$FIX/sample-vuln.xml" ]]; then
         --run "$report_dir" --profile discovery --targets 127.0.0.1 \
         --status 'done' --step discover >/dev/null
     python3 -I "$ROOT/lib/projects.py" summary cli-lab > "$report_dir/project.json"
-    python3 -I "$RPT" report --xml "$report_dir/nmap.xml" --outdir "$report_dir" --formats md,html >/dev/null 2>&1
+    python3 -I "$ROOT/lib/projects.py" summaries > "$report_dir/projects.json"
+    python3 -I "$RPT" report --xml "$report_dir/nmap.xml" --outdir "$report_dir" --formats md,html \
+        --projects-json "$report_dir/projects.json" >/dev/null 2>&1
     contains "markdown has project summary" "$(<"$report_dir/report.md")" "## Project"
     contains "markdown has plan order" "$(<"$report_dir/report.md")" "1 | discover | done"
     contains "markdown has timeline header" "$(<"$report_dir/report.md")" "Scan timeline (in order)"
     contains "html has project section" "$(<"$report_dir/report.html")" "<h2>Project</h2>"
+    contains "service page shows next action" "$(<"$report_dir/service.html")" "Next action"
+    contains "projects page lists test project" "$(<"$report_dir/projects.html")" "cli-lab"
+    contains "projects page links current run" "$(<"$report_dir/projects.html")" "service.html"
     contains "dashboard has project section" "$(python3 -I "$RPT" dashboard "$report_dir/report.json")" "Project"
 else
     skip "project report integration (fixture missing)"

@@ -47,7 +47,8 @@ complete -c xamltech-nmap -s o -d Result\ directory
 complete -c xamltech-nmap -l formats -d Report\ formats
 complete -c xamltech-nmap -l theme -d Color\ theme
 complete -c xamltech-nmap -l no-latency -d Skip\ the\ parallel\ ping\ latency\ table
-complete -c xamltech-nmap -l open -d Open\ the\ HTML\ report\ when\ done
+complete -c xamltech-nmap -l open -d Open\ the\ service\ page\ when\ done\ \(default\)
+complete -c xamltech-nmap -l no-open -d Do\ not\ open\ a\ browser\ when\ reports\ finish
 complete -c xamltech-nmap -l notify -d Bell\ or\ desktop\ notification\ when\ done
 complete -c xamltech-nmap -l no-color -d Force\ colors\ off
 complete -c xamltech-nmap -l color -d Force\ colors\ on
@@ -158,7 +159,7 @@ complete -c xamltech-nmap -l list-scripts -d Browse\ local\ NSE\ scripts
 complete -c xamltech-nmap -l script-help -d Show\ NSE\ script\ documentation
 complete -c xamltech-nmap -l history -d List\ previous\ runs
 complete -c xamltech-nmap -l diff -d Compare\ two\ runs
-complete -c xamltech-nmap -l open-report -d Open\ an\ HTML\ report
+complete -c xamltech-nmap -l open-report -d Open\ the\ service\ page\ or\ HTML\ report
 complete -c xamltech-nmap -l export -d Handoff\ list\ \(urls\,\ hosts\,\ ports\,\ openvas\)
 complete -c xamltech-nmap -l doctor -d Check\ the\ environment
 complete -c xamltech-nmap -l check-updates -d Nmap\ version\ information

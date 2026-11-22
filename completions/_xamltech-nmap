@@ -48,7 +48,8 @@
   '--formats[Report formats]' \
   '--theme[Color theme]' \
   '--no-latency[Skip the parallel ping latency table]' \
-  '--open[Open the HTML report when done]' \
+  '--open[Open the service page when done (default)]' \
+  '--no-open[Do not open a browser when reports finish]' \
   '--notify[Bell or desktop notification when done]' \
   '--no-color[Force colors off]' \
   '--color[Force colors on]' \
@@ -159,7 +160,7 @@
   '--script-help[Show NSE script documentation]' \
   '--history[List previous runs]' \
   '--diff[Compare two runs]' \
-  '--open-report[Open an HTML report]' \
+  '--open-report[Open the service page or HTML report]' \
   '--export[Handoff list (urls, hosts, ports, openvas)]' \
   '--doctor[Check the environment]' \
   '--check-updates[Nmap version information]' \

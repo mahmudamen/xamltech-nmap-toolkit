@@ -74,6 +74,13 @@ Group scans into a resumable assessment. A project keeps an ordered plan, goals,
 `sample-assessment` project is available out of the box. The project summary also appears in `report.json`,
 `report.md`, `report.html` and the terminal dashboard.
 
+## Web service page
+
+Every HTML run generates `service.html`, a landing page with two views: **Scan report** (`report.html`) and
+**Projects** (`projects.html`, all saved projects with plans, statuses and links to their run pages).
+The service page opens automatically when reports finish; pass `--no-open` to keep the browser closed.
+`--open-report RUN` opens the service page when present and falls back to `report.html`.
+
 ## Highlights
 
 **Smart workflows.** `recon` finds live hosts, port-scans only those, then runs version detection and scripts
@@ -114,7 +121,7 @@ Profiles  -p/--profile  -a/--args (custom)
 Tuning    -T 0-5  --ports  --top-ports  --max-rate  --max-retries  --host-timeout
           --min-rate  --min-parallelism  --scanflags  --version-intensity  --mtu  --ttl
 NSE       --scripts  --script-args  --list-scripts [F]  --script-help NAME
-Output    -o DIR  --formats json,csv,md,html  --open  --notify  --no-latency  --theme  --no-color
+Output    -o DIR  --formats json,csv,md,html  --open  --no-open  --notify  --no-latency  --theme  --no-color
 Safety    --authorized  --dry-run  --sudo  -y  --scope FILE  --policy advanced --ack-risk
           --json  --plan-file PLAN.json --plan-hash HASH  --explain
 Automation --save-preset NAME  --preset NAME  --replay N  --target-group NAME
@@ -124,7 +131,7 @@ Projects  --project NAME  --project-create NAME  --project-info TEXT  --project-
           --project-list  --project-show NAME  --project-step-add NAME
           --project-step ID  --goal TEXT  --project-args ARGS
           --project-step-status NAME STEP=STATUS  --note TEXT  --project-resume NAME
-Tools     --list-profiles  --history  --diff A B  --open-report  --export KIND
+Tools     --list-profiles  --history  --diff A B  --open-report [RUN]  --export KIND
           --doctor  --check-updates [--online]  --config FILE  --dump-options
 ```
 
@@ -150,6 +157,7 @@ the generated man page and [docs/OPTIONS.md](docs/OPTIONS.md); regenerate with `
 ```text
 results/2026-11-17_102138_recon_192.168.1.0_24/
 ├── nmap.txt  nmap.xml  nmap.gnmap          native Nmap output (+ stage1-/stage2- for workflows)
+├── service.html  projects.html              web navigation
 ├── report.html  report.md  report.json     reports
 ├── hosts.csv  services.csv  findings.csv   spreadsheets
 ├── hosts-up.txt  host-latency.txt          inventory + parallel latency

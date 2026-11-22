@@ -24,7 +24,7 @@ TOOLKIT_HOME="${XAMLTECH_NMAP_HOME:-$(dirname "$SCRIPT_PATH")}"
 LIB_DIR="$TOOLKIT_HOME/lib"
 SCRIPTS_DIR="$TOOLKIT_HOME/scripts"
 readonly SCRIPT_PATH TOOLKIT_HOME LIB_DIR SCRIPTS_DIR
-SCRIPT_VERSION="$(python3 -I "$LIB_DIR/report.py" version 2>/dev/null || printf '2.2.0')"
+SCRIPT_VERSION="$(python3 -I "$LIB_DIR/report.py" version 2>/dev/null || printf '2.3.0')"
 readonly SCRIPT_VERSION
 ORIGINAL_ARGS=("$@")
 
@@ -46,7 +46,7 @@ SCOPE_FILE=""
 TIMING=""; PORTS=""; TOP_PORTS=""; EXTRA_SCRIPTS=""; SCRIPT_ARGS=""
 MAX_RATE=""; MAX_RETRIES=""; HOST_TIMEOUT=""; DNS_SERVERS=""; IFACE=""; EXCLUDE=""
 NO_PING=0; NO_DNS=0; IPV6=0; EXTRA_VERBOSE=0
-PING_LATENCY=1; OPEN_REPORT=0; NOTIFY=0
+PING_LATENCY=1; OPEN_REPORT=1; NOTIFY=0
 VERBOSE=0; ASSUME_YES=0; DRY_RUN=0; AUTHORIZED=0; USE_SUDO=0; NO_BANNER=0; ONLINE_CHECK=0
 CUSTOM_ARGS=()
 ACTION=""; ACTION_ARG1=""; ACTION_ARG2=""
@@ -181,6 +181,7 @@ parse_args() {
             -6|--ipv6)        IPV6=1; shift ;;
             --no-latency)     PING_LATENCY=0; shift ;;
             --open)           OPEN_REPORT=1; shift ;;
+            --no-open)        OPEN_REPORT=0; shift ;;
             --notify)         NOTIFY=1; shift ;;
             --no-color)       COLOR_MODE=never; shift ;;
             --color)          COLOR_MODE=always; shift ;;

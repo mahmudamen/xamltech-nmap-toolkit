@@ -600,13 +600,28 @@ post_process() {
     latency_report
     write_summary
 
+    if [[ -n "${PROJECT_NAME:-}" ]]; then
+        local project_step=""
+        project_step="$(project_active_step "$PROJECT_NAME" 2>/dev/null || true)"
+        project_record_scan "$SCAN_STATUS" "$RUN_DIR" "$PROFILE" "${TARGETS[*]:-}" \
+            "$PROJECT_NAME" "$project_step"
+    fi
+
     if have_py; then
-        local lat=() fmt_args=(--formats "$REPORT_FORMATS") diff_args=()
+        local lat=() fmt_args=(--formats "$REPORT_FORMATS") diff_args=() project_args=()
+        local projects_json=""
         find_previous_report
         [[ -n "$PREV_REPORT" ]] && diff_args=(--diff-report "$PREV_REPORT")
         [[ -s "$RUN_DIR/host-latency.tsv" ]] && lat=(--latency "$RUN_DIR/host-latency.tsv")
+        if projects_json="$(mktemp "${TMPDIR:-/tmp}/xamltech-projects.XXXXXX")" \
+            && project_cli summaries > "$projects_json" 2>/dev/null; then
+            project_args=(--projects-json "$projects_json")
+        else
+            projects_json=""
+        fi
         py_report report --outdir "$RUN_DIR" --meta "$RUN_DIR/metadata.json" "${fmt_args[@]}" "${lat[@]}" \
-            "${diff_args[@]}" --xml "${xmls[@]}" > /dev/null || warn "Report generation failed (see toolkit.log)."
+            "${diff_args[@]}" "${project_args[@]}" --xml "${xmls[@]}" > /dev/null || warn "Report generation failed (see toolkit.log)."
+        [[ -n "$projects_json" ]] && rm -f "$projects_json"
         py_report dashboard "$RUN_DIR/report.json" --width "$(( UI_COLS > 100 ? 100 : UI_COLS ))" || true
         compare_with_previous
     else
@@ -617,14 +632,11 @@ post_process() {
     printf '\n'
     ok "Completed in ${dur}s"
     kv "Results" "$RUN_DIR"
+    if have_py && [[ "$REPORT_FORMATS" == *html* && -f "$RUN_DIR/service.html" ]]; then
+        kv "Service page" "$RUN_DIR/service.html" "$C_ACCENT"
+    fi
     if have_py && [[ "$REPORT_FORMATS" == *html* && -f "$RUN_DIR/report.html" ]]; then
         kv "HTML report" "$RUN_DIR/report.html" "$C_ACCENT"
-    fi
-    if [[ -n "${PROJECT_NAME:-}" ]]; then
-        local project_step=""
-        project_step="$(project_active_step "$PROJECT_NAME" 2>/dev/null || true)"
-        project_record_scan "$SCAN_STATUS" "$RUN_DIR" "$PROFILE" "${TARGETS[*]:-}" \
-            "$PROJECT_NAME" "$project_step"
     fi
     SCAN_STATUS="done"
     fix_ownership
@@ -658,7 +670,10 @@ finish_hooks() {
         printf '\a'
         command_exists notify-send && notify-send "XamlTech Nmap Toolkit" "Scan finished: $(target_display)" 2>/dev/null || true
     fi
-    if (( ${OPEN_REPORT:-0} )) && [[ -f "$RUN_DIR/report.html" ]]; then open_path "$RUN_DIR/report.html"; fi
+    if (( ${OPEN_REPORT:-0} )); then
+        if [[ -f "$RUN_DIR/service.html" ]]; then open_path "$RUN_DIR/service.html"
+        elif [[ -f "$RUN_DIR/report.html" ]]; then open_path "$RUN_DIR/report.html"; fi
+    fi
 }
 
 open_path() {
@@ -694,11 +709,13 @@ diff_runs() {
 }
 
 open_report() {
-    local d
+    local d page
     d="$(resolve_run "${1:-latest}")" || die "Run not found: ${1:-latest}"
-    [[ -f "$d/report.html" ]] || die "No HTML report in $d"
-    info "$d/report.html"
-    open_path "$d/report.html"
+    if [[ -f "$d/service.html" ]]; then page="$d/service.html"
+    elif [[ -f "$d/report.html" ]]; then page="$d/report.html"
+    else die "No service page or HTML report in $d"; fi
+    info "$page"
+    open_path "$page"
 }
 
 export_run() {

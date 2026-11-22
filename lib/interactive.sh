@@ -181,13 +181,13 @@ history_menu() {
     while IFS= read -r d; do runs+=("$d"); done < <(find "$OUTPUT_DIR" -maxdepth 1 -mindepth 1 -type d ! -name latest -printf '%f\n' 2>/dev/null | sort -r | head -12)
     (( ${#runs[@]} )) || return 0
     ui_menu "History actions" \
-        "open|Open an HTML report|Pick a run" \
+        "open|Open a service page|Pick a run" \
         "diff|Compare two runs|Pick baseline and current" \
         "back|Back" || return 0
     case "$MENU_REPLY" in
         open)
             for d in "${runs[@]}"; do items+=("$d|$d|"); done
-            ui_menu "Open report" "${items[@]}" || return 0
+            ui_menu "Open service page" "${items[@]}" || return 0
             open_report "$MENU_REPLY" ;;
         diff)
             for d in "${runs[@]}"; do items+=("$d|$d|"); done
@@ -228,10 +228,10 @@ save_settings() {
 
 settings_menu() {
     while :; do
-        ui_menu "Settings   (theme: $THEME_NAME, formats: $REPORT_FORMATS, open report: $OPEN_REPORT)" \
+        ui_menu "Settings   (theme: $THEME_NAME, formats: $REPORT_FORMATS, open service: $OPEN_REPORT)" \
             "theme|Theme|Change colors and headline gradient" \
             "formats|Report formats|Choose which reports are generated" \
-            "open|Auto-open HTML report|Toggle" \
+            "open|Auto-open service page|Toggle" \
             "output|Output directory|Currently $OUTPUT_DIR" \
             "save|Save settings|Write ~/.config/xamltech-nmap-toolkit/config" \
             "back|Back" || return 0

@@ -1,5 +1,18 @@
 # Changelog
 
+## [2.3.0] - 2026-11-22
+
+### Added
+- Generated `service.html` web landing page per HTML run, with navigation to `report.html` and
+  `projects.html`. The projects view lists all saved projects, plan status and links to recent run pages.
+- `--no-open` to keep the browser closed. `--open-report RUN` now opens the service page when present and
+  falls back to `report.html` for older runs.
+
+### Changed
+- HTML reports finish by opening the service page automatically; the existing `--open` flag remains accepted.
+- Project scans are recorded before report generation so the service and projects pages include the current run.
+- Version is now `2.3.0`; existing flags, exit codes and report formats remain backward compatible.
+
 ## [2.2.0] - 2026-11-22
 
 ### Added
