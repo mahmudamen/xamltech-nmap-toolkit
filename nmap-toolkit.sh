@@ -24,7 +24,7 @@ TOOLKIT_HOME="${XAMLTECH_NMAP_HOME:-$(dirname "$SCRIPT_PATH")}"
 LIB_DIR="$TOOLKIT_HOME/lib"
 SCRIPTS_DIR="$TOOLKIT_HOME/scripts"
 readonly SCRIPT_PATH TOOLKIT_HOME LIB_DIR SCRIPTS_DIR
-SCRIPT_VERSION="$(python3 -I "$LIB_DIR/report.py" version 2>/dev/null || printf '2.3.0')"
+SCRIPT_VERSION="$(python3 -I "$LIB_DIR/report.py" version 2>/dev/null || printf '2.5.0')"
 readonly SCRIPT_VERSION
 ORIGINAL_ARGS=("$@")
 
@@ -93,7 +93,7 @@ ${C_ACCENT}${C_BOLD}EXAMPLES${C_RESET}
   $(basename "$0")                                              ${C_GRAY}# guided menu${C_RESET}
   $(basename "$0") -t 192.168.1.0/24 -p discovery
   $(basename "$0") -t 192.168.1.0/24 -p recon              ${C_GRAY}# staged discovery${C_RESET}
-  $(basename "$0") -t erp.lan -p odoo --open               ${C_GRAY}# Odoo exposure review${C_RESET}
+  $(basename "$0") -t 192.168.1.0/24 -p mynetwork --open   ${C_GRAY}# local network review${C_RESET}
   $(basename "$0") -t 10.0.0.5 -p tls --ports 443,8443
   $(basename "$0") -t 10.0.0.0/24 -p audit --scope scope.txt --sudo
   $(basename "$0") -t 192.168.1.1 -p custom -a "-sV --top-ports 100"

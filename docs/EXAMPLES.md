@@ -8,10 +8,10 @@
 ./nmap-toolkit.sh -t 192.168.1.0/24 -p recon --open
 ./nmap-toolkit.sh -t 192.168.1.0/24 -p inventory --sudo        # + OS detection and traceroute
 
-# Odoo / POS estates (XamlTech specials)
-./nmap-toolkit.sh -t erp.example.com -p odoo                   # version, DB manager/list exposure, TLS, PG exposure
-./nmap-toolkit.sh -t 10.20.0.0/24 -p pos                       # ESC/POS printers, CUPS/IPP, Odoo POS ports
-./nmap-toolkit.sh -t 10.20.0.5 -p odoo --scripts http-security-headers
+# Local network review (XamlTech default)
+./nmap-toolkit.sh -t 192.168.1.0/24 -p mynetwork                # common web/admin ports + safe NSE
+./nmap-toolkit.sh -t 10.20.0.5 -p mynetwork --ports 80,443,8080
+./nmap-toolkit.sh -t 10.20.0.5 -p mynetwork --scripts http-security-headers
 
 # Targeted service reviews
 ./nmap-toolkit.sh -t 10.0.0.5 -p tls --ports 443,8443

@@ -30,17 +30,18 @@ if [[ "$ACTION" == uninstall ]]; then
 fi
 
 mkdir -p "$SHARE" "$PREFIX/bin" "$(dirname "$COMP")"
-rm -rf "${SHARE:?}/lib" "${SHARE:?}/scripts"
-cp -r "$SRC/lib" "$SRC/scripts" "$SRC/nmap-toolkit.sh" "$SRC/LICENSE" "$SHARE/"
+rm -rf "${SHARE:?}/lib" "${SHARE:?}/scripts" "${SHARE:?}/webapp"
+cp -r "$SRC/lib" "$SRC/scripts" "$SRC/webapp" "$SRC/nmap-toolkit.sh" "$SRC/start.sh" "$SRC/LICENSE" "$SHARE/"
 mkdir -p "$SHARE/config" "$SHARE/docs"
 cp -r "$SRC"/config/. "$SHARE/config/"
 cp "$SRC"/docs/*.md "$SHARE/docs/"
-chmod +x "$SHARE/nmap-toolkit.sh" "$SHARE/lib/report.py"
+chmod +x "$SHARE/nmap-toolkit.sh" "$SHARE/start.sh" "$SHARE/lib/report.py" "$SHARE/lib/web.py"
 ln -sfn "$SHARE/nmap-toolkit.sh" "$BIN"
 cp "$SRC/completions/xamltech-nmap.bash" "$COMP"
 
 echo "Installed to $SHARE"
 echo "Command:     xamltech-nmap   (symlink: $BIN)"
+echo "Web service: $SHARE/start.sh"
 case ":$PATH:" in *":$PREFIX/bin:"*) ;; *) echo "Note: add $PREFIX/bin to your PATH." ;; esac
 echo "Completion:  open a new shell (or: source $COMP)"
 echo "Try:         xamltech-nmap --doctor"

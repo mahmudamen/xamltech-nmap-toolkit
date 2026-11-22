@@ -32,11 +32,9 @@ import threading
 import xml.etree.ElementTree as ET
 from collections import Counter, OrderedDict
 
-VERSION = "2.3.0"
+VERSION = "2.5.0"
 SEVERITIES = ["CRITICAL", "HIGH", "MEDIUM", "LOW", "INFO"]
 SEV_RANK = {s: i for i, s in enumerate(SEVERITIES)}
-# Odoo majors older than this are reported as likely out of support (edit to taste).
-ODOO_MIN_SUPPORTED = 17
 
 
 # --------------------------------------------------------------------------- #
@@ -214,7 +212,7 @@ PORT_RULES = {
     ("tcp", 6000): ("LOW", "X11 server port exposed", "Disable remote X11 or tunnel over SSH."),
     ("tcp", 111): ("LOW", "rpcbind exposed", "Filter unless NFS/NIS is required."),
     ("udp", 161): ("LOW", "SNMP exposed", "Use SNMPv3; restrict by ACL."),
-    ("tcp", 9100): ("LOW", "Raw print port (JetDirect/ESC-POS) open", "Restrict to POS/print VLAN; anyone reaching it can print."),
+    ("tcp", 9100): ("LOW", "Raw print port (JetDirect) open", "Restrict to a print VLAN; anyone reaching it can print."),
 }
 DB_PORTS = {1433: "Microsoft SQL Server", 1521: "Oracle TNS", 3306: "MySQL/MariaDB", 5432: "PostgreSQL",
             5984: "CouchDB", 6379: "Redis", 9042: "Cassandra", 9200: "Elasticsearch", 11211: "Memcached",
@@ -311,23 +309,6 @@ def analyze_script(findings, host, port, sc):
         add(findings, "MEDIUM", host, where, "RDP without Network Level Authentication", "", "Require NLA/CredSSP.", sid)
     elif sid == "dns-recursion" and "enabled" in low:
         add(findings, "MEDIUM", host, where, "Open recursive DNS resolver", "", "Restrict recursion to internal clients.", sid)
-    elif sid == "odoo-info":
-        fields = dict(re.findall(r"^\s*([a-z_]+):\s*(.+)$", out, re.M))
-        ver = fields.get("version", "")
-        if ver:
-            add(findings, "INFO", host, where, f"Odoo {ver} detected", out[:300], "", sid)
-            mm = re.match(r"(?:saas~)?(\d+)", ver)
-            if mm and int(mm.group(1)) < ODOO_MIN_SUPPORTED:
-                add(findings, "LOW", host, where, f"Odoo {ver} is likely out of support", "",
-                    f"Plan an upgrade (toolkit considers < {ODOO_MIN_SUPPORTED}.0 unsupported).", sid)
-        if "exposed" in fields.get("database_listing", "").lower():
-            add(findings, "MEDIUM", host, where, "Odoo database listing is public", fields["database_listing"],
-                "Set list_db = False in odoo.conf (and db_name/dbfilter).", sid)
-        if "exposed" in fields.get("database_manager", "").lower():
-            add(findings, "HIGH", host, where, "Odoo database manager page is reachable", fields["database_manager"],
-                "Block /web/database/* at the proxy, set a strong admin_passwd, list_db = False.", sid)
-        if "http" == fields.get("transport", "") and where and where["port"] not in (443, 8071):
-            add(findings, "LOW", host, where, "Odoo served over plain HTTP", "", "Terminate TLS in a reverse proxy.", sid)
 
 
 def analyze_host(host):

@@ -5,7 +5,7 @@ Version: 1.0.0 (2026-11-19). Applies to every change in this repository.
 ## Purpose
 
 A safe, fast, pleasant CLI around Nmap for authorized discovery, inventory, diagnostics and exposure review,
-with first-class Odoo/POS awareness. Small dependency footprint: Bash 4.4+, Nmap, optional stdlib-only Python.
+with a generic local-network profile. Small dependency footprint: Bash 4.4+, Nmap, optional stdlib-only Python.
 
 ## Non-negotiable principles
 

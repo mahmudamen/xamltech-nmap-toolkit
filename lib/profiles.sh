@@ -36,8 +36,7 @@ PROFILE_TABLE=(
 'mail|Services|safe|no|medium|SMTP/IMAP/POP3 capabilities and TLS'
 'rdp|Services|safe|no|fast|RDP: encryption level and NTLM info'
 'ftp|Services|safe|no|fast|FTP: banner, anonymous access, system type'
-'odoo|XamlTech|safe|no|medium|Odoo ERP: version, DB manager/listing exposure, TLS, PostgreSQL exposure'
-'pos|XamlTech|safe|no|medium|POS network: ESC/POS printers (9100), CUPS/IPP, Odoo POS, web UIs'
+'mynetwork|XamlTech|safe|no|medium|Local network review: common web/admin ports, versions and safe NSE checks'
 'iot|XamlTech|safe|no|medium|Cameras/IoT/embedded: RTSP, UPnP, web UIs, MQTT ports'
 'audit|Audit|safe|yes|slow|Exposure review: top-1000 + versions + TLS/SSH/SMB/DB/HTTP checks'
 )
@@ -247,13 +246,9 @@ build_nmap_args() {
             NMAP_ARGS=(-sV -T4 --open --reason -p21,990)
             _use_scripts "ftp-anon,ftp-syst"
             ;;
-        odoo)
-            NMAP_ARGS=(-sV -T4 --open --reason -p22,80,443,5432,8069,8071,8072)
-            _use_scripts "$sd/odoo-info.nse,http-title,http-server-header,http-headers,http-methods,ssl-cert,ssl-enum-ciphers"
-            ;;
-        pos)
-            NMAP_ARGS=(-sV -T4 --open --reason -p80,443,515,631,8069,8072,9100,9101,9102)
-            _use_scripts "$sd/odoo-info.nse,pjl-ready-message,cups-info,http-title,http-server-header"
+        mynetwork)
+            NMAP_ARGS=(-sV -T4 --open --reason -p22,80,443,445,1433,3306,5432,6379,8080,8443,27017)
+            _use_scripts "http-title,http-server-header,http-headers,http-methods,ssl-cert,ssl-enum-ciphers,ssh2-enum-algos,smb-protocols,redis-info,mongodb-info"
             ;;
         iot)
             NMAP_ARGS=(-sV -T4 --open --reason -p80,443,554,1883,1900,5683,8000,8080,8554,8883,37777)
@@ -261,7 +256,7 @@ build_nmap_args() {
             ;;
         audit)
             NMAP_ARGS=(-sS -T3 --top-ports 1000 -sV --open --reason)
-            _use_scripts "$sd/odoo-info.nse,ssl-cert,ssl-enum-ciphers,ssh2-enum-algos,ssh-auth-methods,http-title,http-methods,http-server-header,smb-protocols,smb2-security-mode,rdp-enum-encryption,redis-info,mongodb-info,memcached-info,ftp-anon,telnet-encryption,mysql-info,ms-sql-info"
+            _use_scripts "ssl-cert,ssl-enum-ciphers,ssh2-enum-algos,ssh-auth-methods,http-title,http-methods,http-server-header,smb-protocols,smb2-security-mode,rdp-enum-encryption,redis-info,mongodb-info,memcached-info,ftp-anon,telnet-encryption,mysql-info,ms-sql-info"
             ;;
         custom)
             [[ ${#CUSTOM_ARGS[@]} -gt 0 ]] || die "Custom profile requires --args."

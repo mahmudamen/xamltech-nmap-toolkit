@@ -1,5 +1,34 @@
 # Changelog
 
+## [2.5.0] - 2026-11-22
+
+### Added
+- Local web workspace is now a client-routed single-page app with Live, Reports, Timeline, Warnings, Projects and
+  MongoDB views.
+- Live view tracks running toolkit/Nmap processes, incomplete run directories, active browser sessions and recent
+  workspace events using server-sent events with polling fallback.
+- MongoDB sample viewer reads collections via local `mongosh` when configured and falls back to the bundled NoSQL
+  JSON fixture under `config/mongo/sample-assessment.json`.
+- New `/api/state`, `/api/mongo`, `/api/events` and `/api/session` endpoints.
+
+### Changed
+- Renamed the `odoo` profile to `mynetwork` and removed the `pos` profile, first-party Odoo NSE checks and Odoo/POS-specific findings.
+- Version is now `2.5.0`; the CLI, generated reports and option registry remain backward compatible.
+- `start.sh` opens the Live dashboard first. The workspace ships its CSS, JavaScript and sample JSON with the
+  standard installer.
+
+## [2.4.0] - 2026-11-22
+
+### Added
+- `start.sh` launches a localhost-only web workspace for reports, scan timeline, warnings and projects.
+- Reports can be assigned to any project from the browser; assignments append a scan record and advance the
+  selected or active project step.
+- Project info, goals and step goal/status/note fields edit inline with debounced auto-save to project JSON.
+- New project and step creation forms in the web workspace.
+
+### Changed
+- Version is now `2.4.0`; the CLI, generated reports and option registry remain backward compatible.
+
 ## [2.3.0] - 2026-11-22
 
 ### Added
@@ -74,10 +103,9 @@
 - Gradient headline banner, 6 themes, truecolor/256/ASCII rendering, `NO_COLOR` support
 - Arrow-key interactive menus with automatic local-subnet detection
 - Live colorized Nmap output with inline progress bar, spinner, severity dashboard
-- 33 profiles (was 7): ARP/multi-probe sweeps, UDP, firewall mapping, polite, NSE packs, service families,
-  Odoo / POS / IoT, audit; `recon` and `inventory` multi-stage workflows
+- 32 profiles (was 7): ARP/multi-probe sweeps, UDP, firewall mapping, polite, NSE packs, service families,
+  local network/IoT, audit; `recon` and `inventory` multi-stage workflows
 - NSE script validation against local `script.db`; honest User-Agent; `--list-scripts`, `--script-help`
-- Custom `scripts/odoo-info.nse` (version, public DB list, DB manager exposure) - read-only
 - Reports: JSON, CSV, Markdown, self-contained HTML; heuristic findings with severity and advice
 - Change detection (`--diff`, `--history`, automatic diff vs previous run, `--fail-on-change`)
 - `--export` handoff lists for ZAP/Burp, Masscan, OpenVAS/Nessus

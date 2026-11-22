@@ -20,9 +20,8 @@ Every run creates `results/<timestamp>_<profile>_<target>/` (and a `results/late
 Severity (`CRITICAL`…`INFO`) comes from simple, readable rules in `lib/report.py`: risky exposed services
 (Telnet, FTP, RDP, databases…), NSE results (`VULNERABLE`, SMBv1, SMB signing, anonymous FTP, unauthenticated
 Redis/Memcached), TLS problems (expired/self-signed/SHA-1 certificates, SSLv3/TLS1.0/1.1, weak ciphers), weak SSH
-algorithms, risky HTTP methods, and Odoo exposure (public DB list / DB manager, unsupported versions).
-Verify before acting; for authenticated CVE coverage use a real vulnerability scanner (see INTEGRATIONS.md).
-Edit `ODOO_MIN_SUPPORTED` in `lib/report.py` to match the Odoo versions you support.
+algorithms and risky HTTP methods. Verify before acting; for authenticated CVE coverage use a real vulnerability
+scanner (see INTEGRATIONS.md).
 
 ## Safety of report content
 Banners and script output come from scanned hosts and are untrusted: HTML is escaped, CSV cells that start with

@@ -78,7 +78,7 @@ CLI args -> registry validation -> config defaults -> profile data -> pipeline s
 - **Registry drift:** generate to a temp dir, diff against committed artifacts.
 - **Fixtures:** `tests/fixtures/sample-vuln.xml` extended with host-script finding + hostile banner;
   new `tests/fixtures/sample-mixed-findings.json`.
-- **Live:** localhost mock Odoo scan (existing) plus one guarded advanced-options scan.
+- **Live:** localhost HTTP service scan plus one guarded advanced-options scan.
 - **Security:** hostile banner injection into HTML/CSV/Markdown; XML entity rejection; blocked flags;
   out-of-scope targets; plan-hash mismatch; file permissions after sudo run.
 - **Performance:** time `make test` and a 1-host dry-run; version lookup cache asserted by call count.

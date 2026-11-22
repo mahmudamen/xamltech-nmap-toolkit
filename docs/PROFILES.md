@@ -59,8 +59,7 @@ _Generated from `lib/profiles.sh` - run `./nmap-toolkit.sh --list-profiles` for 
 
 | Profile | Risk | Root | Speed | What it does |
 |---|---|---|---|---|
-| `odoo` | safe | no | medium | Odoo ERP: version, DB manager/listing exposure, TLS, PostgreSQL exposure |
-| `pos` | safe | no | medium | POS network: ESC/POS printers (9100), CUPS/IPP, Odoo POS, web UIs |
+| `mynetwork` | safe | no | medium | Local network review: common web/admin ports, service versions and safe NSE checks |
 | `iot` | safe | no | medium | Cameras/IoT/embedded: RTSP, UPnP, web UIs, MQTT ports |
 
 ## Audit

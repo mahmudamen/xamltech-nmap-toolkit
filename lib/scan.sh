@@ -474,7 +474,6 @@ run_workflow() {
         build_nmap_args "$wf_profile"
         PORTS="$save_ports"; TOP_PORTS="$save_top"
         [[ -z "$stage_scripts" ]] || NMAP_ARGS+=(--script "$stage_scripts")
-        [[ "$name" == services ]] && NMAP_ARGS+=(--script "$SCRIPTS_DIR/odoo-info.nse")
         if (( with_os )) && [[ "$name" == services ]]; then
             NMAP_ARGS+=(-O --traceroute --osscan-guess)
             adapt_args_for_privileges

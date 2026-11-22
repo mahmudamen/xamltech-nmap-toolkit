@@ -1,0 +1,57 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="color-scheme" content="dark light">
+  <meta name="theme-color" content="#0b0f1a" media="(prefers-color-scheme: dark)">
+  <meta name="theme-color" content="#f5f7fc" media="(prefers-color-scheme: light)">
+  <meta name="xamltech-token" content="__TOKEN__">
+  <title>XamlTech Scan Service</title>
+  <link rel="stylesheet" href="/static/app.css">
+  <script src="/static/app.js" defer></script>
+</head>
+<body>
+  <a class="skip" href="#app">Skip to content</a>
+  <div class="shell">
+    <aside class="side">
+      <a class="brand" href="/" data-link aria-label="XamlTech home">
+        <span class="brand-mark">XT</span>
+        <span class="brand-copy"><b>XamlTech</b><small>scan service</small></span>
+      </a>
+      <nav class="side-nav" aria-label="Primary">
+        <a href="/activity" data-link data-nav="activity"><i>01</i><span>Live</span></a>
+        <a href="/reports" data-link data-nav="reports"><i>02</i><span>Reports</span></a>
+        <a href="/timeline" data-link data-nav="timeline"><i>03</i><span>Timeline</span></a>
+        <a href="/warnings" data-link data-nav="warnings"><i>04</i><span>Warnings</span></a>
+        <a href="/projects" data-link data-nav="projects"><i>05</i><span>Projects</span></a>
+        <a href="/mongo" data-link data-nav="mongo"><i>06</i><span>MongoDB</span></a>
+      </nav>
+      <div class="side-foot">
+        <span class="eyebrow">Session</span>
+        <span class="mono" id="session-id">connecting</span>
+        <span class="muted" id="session-route">/</span>
+      </div>
+    </aside>
+    <div class="work">
+      <header class="topbar">
+        <div class="live"><span class="pulse" id="live-pulse"></span><span id="live-text">connecting</span></div>
+        <div class="topmeta">
+          <span class="mono" id="last-update">--:--:--</span>
+          <span id="session-count">0 sessions</span>
+          <button class="ghost" id="refresh" type="button">Refresh</button>
+        </div>
+      </header>
+      <main id="app" tabindex="-1">
+        <div class="loading"><span></span><p>Loading workspace…</p></div>
+      </main>
+      <footer class="appfoot">
+        <span>Authorized systems only. Browser edits write project JSON under your config directory.</span>
+        <span class="mono">v<span id="version">__VERSION__</span></span>
+      </footer>
+    </div>
+  </div>
+  <div class="toast" id="toast" role="status" aria-live="polite"></div>
+  <noscript><p class="noscript">This workspace needs JavaScript enabled.</p></noscript>
+</body>
+</html>

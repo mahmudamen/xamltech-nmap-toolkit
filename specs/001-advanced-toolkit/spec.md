@@ -177,7 +177,7 @@ interactive advanced mode.
 ## Out of scope
 
 See Non-goals. Roadmap ideas explicitly deferred: SARIF ticket export to Jira, webhook secret storage,
-authenticated `odoo.conf` hardening checks over SSH, runtime Odoo support-matrix fetch.
+authenticated service hardening checks over SSH, runtime support-matrix fetch.
 
 ## References
 

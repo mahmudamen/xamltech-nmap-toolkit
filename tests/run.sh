@@ -6,7 +6,7 @@ TK="$ROOT/nmap-toolkit.sh"
 RPT="$ROOT/lib/report.py"
 FIX="$ROOT/tests/fixtures"
 TMP="$(mktemp -d)"
-trap 'rm -rf "$TMP"; [[ -n "${MOCK_PID:-}" ]] && kill "$MOCK_PID" 2>/dev/null' EXIT
+trap 'rm -rf "$TMP"; [[ -n "${MOCK_PID:-}" ]] && kill "$MOCK_PID" 2>/dev/null; [[ -n "${WEB_PID:-}" ]] && kill "$WEB_PID" 2>/dev/null' EXIT
 PASS=0; FAIL=0; SKIP=0
 export NO_COLOR=1 LANG=C.UTF-8
 T() { "$TK" --no-color --no-banner -o "$TMP/res" "$@"; }
@@ -18,19 +18,77 @@ check() { local name="$1"; shift; if "$@" >/dev/null 2>&1; then ok "$name"; else
 check_not() { local name="$1"; shift; if "$@" >/dev/null 2>&1; then bad "$name (should have failed)"; else ok "$name"; fi; }
 contains() { local name="$1" hay="$2" needle="$3"; if grep -qF -- "$needle" <<< "$hay"; then ok "$name"; else bad "$name" "missing: $needle"; fi; }
 absent()   { local name="$1" hay="$2" needle="$3"; if grep -qF -- "$needle" <<< "$hay"; then bad "$name" "unexpected: $needle"; else ok "$name"; fi; }
+http_get() { python3 -c 'import sys,urllib.request;sys.stdout.buffer.write(urllib.request.urlopen(sys.argv[1],timeout=3).read())' "$1"; }
+http_status() { python3 -c 'import sys,urllib.request,urllib.error
+try:
+ r=urllib.request.urlopen(sys.argv[1],timeout=3);print(r.status)
+except urllib.error.HTTPError as e: print(e.code)
+except Exception: print(000)' "$1"; }
+http_stream() { python3 - "$@" <<'PY'
+import socket, sys
+from urllib.parse import urlsplit
+url = urlsplit(sys.argv[1])
+sock = socket.create_connection((url.hostname, url.port), 2)
+sock.settimeout(3)
+request = f'GET {url.path} HTTP/1.1\r\nHost: {url.hostname}:{url.port}\r\nAccept: text/event-stream\r\nConnection: close\r\n\r\n'
+sock.sendall(request.encode())
+data = b''
+try:
+    while len(data) < 700:
+        chunk = sock.recv(4096)
+        if not chunk:
+            break
+        data += chunk
+except Exception:
+    pass
+print(data.decode(errors='replace'))
+PY
+}
+http_post() { python3 - "$@" <<'PY'
+import json, sys, urllib.request, urllib.error
+url, mode = sys.argv[1:3]
+token = sys.argv[3]
+payload = {}
+if mode == 'form':
+    import urllib.parse
+    for pair in sys.argv[4:]:
+        key, value = pair.split('=', 1)
+        payload[key] = value
+    data = urllib.parse.urlencode(payload).encode()
+    headers = {}
+else:
+    data = json.dumps({pair.split('=', 1)[0]: pair.split('=', 1)[1] for pair in sys.argv[4:]}).encode()
+    headers = {'Content-Type': 'application/json', 'X-XamlTech-Token': token}
+req = urllib.request.Request(url, data=data, headers=headers, method='POST')
+try:
+    print(urllib.request.urlopen(req, timeout=3).status)
+except urllib.error.HTTPError as error:
+    print(error.code)
+PY
+}
 
 echo "== static"
-for f in "$TK" "$ROOT"/lib/*.sh "$ROOT"/install.sh; do check "bash -n $(basename "$f")" bash -n "$f"; done
-check "python compiles" python3 -I -c "import ast,sys; [ast.parse(open(p).read()) for p in sys.argv[1:]]" "$RPT" "$ROOT/lib/projects.py"
-if command -v shellcheck >/dev/null; then check "shellcheck (warning level)" shellcheck -x -S warning "$TK" "$ROOT"/lib/*.sh "$ROOT/install.sh"; else skip "shellcheck not installed"; fi
+for f in "$TK" "$ROOT/start.sh" "$ROOT"/lib/*.sh "$ROOT"/install.sh; do check "bash -n $(basename "$f")" bash -n "$f"; done
+check "python compiles" python3 -I -c "import ast,sys; [ast.parse(open(p).read()) for p in sys.argv[1:]]" "$RPT" "$ROOT/lib/projects.py" "$ROOT/lib/web.py"
+if command -v node >/dev/null; then check "SPA JavaScript syntax" node --check "$ROOT/webapp/app.js"; else skip "node unavailable for JS syntax check"; fi
+if command -v shellcheck >/dev/null; then check "shellcheck (warning level)" shellcheck -x -S warning "$TK" "$ROOT/start.sh" "$ROOT"/lib/*.sh "$ROOT/install.sh"; else skip "shellcheck not installed"; fi
+check "SPA shell exists" test -s "$ROOT/webapp/index.html"
+check "SPA stylesheet exists" test -s "$ROOT/webapp/app.css"
+check "MongoDB fixture is valid JSON" python3 -I -c "import json;d=json.load(open('$ROOT/config/mongo/sample-assessment.json'));assert d['collections']"
 "$ROOT/install.sh" --prefix "$TMP/install" >/dev/null 2>&1
 check "install ships project engine" test -s "$TMP/install/share/xamltech-nmap-toolkit/lib/projects.py"
+check "install ships web engine" test -s "$TMP/install/share/xamltech-nmap-toolkit/lib/web.py"
+check "install ships start script" test -x "$TMP/install/share/xamltech-nmap-toolkit/start.sh"
+check "install ships SPA assets" test -s "$TMP/install/share/xamltech-nmap-toolkit/webapp/app.js"
+check "install ships MongoDB fixture" test -s "$TMP/install/share/xamltech-nmap-toolkit/config/mongo/sample-assessment.json"
 check "install ships sample project" test -s "$TMP/install/share/xamltech-nmap-toolkit/config/projects/sample-assessment.json"
 
 echo "== cli basics"
 contains "--version" "$("$TK" --version)" "2."
 contains "--help lists --export" "$("$TK" --no-color --help)" "--export"
 contains "--help lists --no-open" "$("$TK" --no-color --help)" "--no-open"
+contains "start.sh help" "$(bash "$ROOT/start.sh" --help)" "--port"
+check_not "start.sh rejects bad port" bash "$ROOT/start.sh" --port 70000 --no-open
 mkdir -p "$TMP/openres/openrun" "$TMP/bin"
 : > "$TMP/openres/openrun/report.html"; : > "$TMP/openres/openrun/service.html"
 printf '#!/bin/sh\nprintf "%%s\\n" "$1" > "%s/opened"\n' "$TMP" > "$TMP/bin/xdg-open"
@@ -39,7 +97,7 @@ PATH="$TMP/bin:$PATH" DISPLAY=:99 "$TK" --no-color --no-banner -o "$TMP/openres"
 sleep 0.3
 contains "--open-report opens service page first" "$(<"$TMP/opened")" "service.html"
 out="$(T --list-profiles)"
-for p in discovery quick standard odoo pos audit recon vuln-safe; do contains "profile listed: $p" "$out" "$p"; done
+for p in discovery quick standard mynetwork audit recon vuln-safe; do contains "profile listed: $p" "$out" "$p"; done
 
 echo "== input validation"
 for bad_t in 'a;b' '$(id)' '`id`' 'x|y' '-oN' 'a b;c'; do
@@ -87,8 +145,9 @@ contains "timing override" "$out" "-T2"
 contains "ports override" "$out" "-p22,80"
 absent "top-ports replaced by --ports" "$out" "--top-ports 100"
 contains "max-rate override" "$out" "--max-rate 100"
-out="$(T -t 127.0.0.1 -p odoo --dry-run 2>&1)"
-contains "odoo profile uses bundled NSE" "$out" "odoo-info.nse"
+out="$(T -t 127.0.0.1 -p mynetwork --dry-run 2>&1)"
+contains "mynetwork profile uses safe NSE" "$out" "http-title"
+absent "mynetwork has no vendor NSE" "$out" "odoo-info"
 contains "honest user-agent" "$out" "XamlTech-Nmap-Toolkit"
 
 echo "== report engine (fixture)"
@@ -288,16 +347,12 @@ contains "config keys generated" "$keys" "OUTPUT_DIR"
 echo "== live integration (localhost, real nmap)"
 if command -v nmap >/dev/null; then
     port=$((20000 + RANDOM % 20000))
-    python3 "$FIX/mock_odoo.py" "$port" --version 15.0 --expose-db --expose-manager >/dev/null 2>&1 & MOCK_PID=$!
+    python3 -m http.server "$port" --bind 127.0.0.1 >/dev/null 2>&1 & MOCK_PID=$!
     sleep 1
-    out="$(T -t 127.0.0.1 -p odoo --ports "$port" -y 2>&1)"; rc=$?
-    [[ $rc -eq 0 ]] && ok "odoo scan exits 0" || bad "odoo scan rc=$rc" "$out"
-    contains "live: Odoo version found"       "$out" "Odoo 15.0 detected"
-    contains "live: DB manager flagged"       "$out" "database manager page is reachable"
-    contains "live: DB listing flagged"       "$out" "database listing is public"
-    contains "live: out-of-support flagged"   "$out" "likely out of support"
-    run="$(find "$TMP/res" -mindepth 1 -maxdepth 1 -type d -name '*_odoo_*' | head -1)"
-    [[ -n "$run" ]] && ok "dry runs left no directories behind (only the real run exists)" || bad "no odoo run dir"
+    out="$(T -t 127.0.0.1 -p mynetwork --ports "$port" -y 2>&1)"; rc=$?
+    [[ $rc -eq 0 ]] && ok "mynetwork scan exits 0" || bad "mynetwork scan rc=$rc" "$out"
+    run="$(find "$TMP/res" -mindepth 1 -maxdepth 1 -type d -name '*_mynetwork_*' | head -1)"
+    [[ -n "$run" ]] && ok "dry runs left no directories behind (only the real run exists)" || bad "no mynetwork run dir"
     [[ "$(find "$TMP/res" -mindepth 1 -maxdepth 1 -type d | wc -l)" -eq 1 ]] && ok "exactly one run dir so far" || bad "stray run dirs from dry-runs"
     for f in nmap.txt nmap.xml nmap.gnmap metadata.json report.json report.html summary.txt toolkit.log command.txt audit.log; do check "run dir has $f" test -s "$run/$f"; done
     [[ "$(stat -c %a "$run/audit.log")" == 600 ]] && ok "audit.log is 0600" || bad "audit.log mode $(stat -c %a "$run/audit.log")"
@@ -369,6 +424,63 @@ if [[ -f "$FIX/sample-vuln.xml" ]]; then
 else
     skip "project report integration (fixture missing)"
 fi
+
+echo "== web workspace SPA"
+export XAMLTECH_NMAP_PROJECTS_DIR="$TMP/web/projects"
+webroot="$TMP/web/results"; webrun="$webroot/2026_web_run"
+mkdir -p "$webrun" "$webroot/2026_pending_run"
+printf '{"profile":"discovery","targets":"127.0.0.1"}\n' > "$webroot/2026_pending_run/metadata.json"
+cp "$FIX/sample-vuln.xml" "$webrun/nmap.xml"
+python3 -I "$ROOT/lib/projects.py" create web-lab --info 'Web workspace QA' --goals 'web goal' >/dev/null
+python3 -I "$ROOT/lib/projects.py" add-step web-lab discover --goal 'Find hosts' >/dev/null
+python3 -I "$ROOT/lib/projects.py" summaries > "$webrun/projects.json"
+python3 -I "$RPT" report --xml "$webrun/nmap.xml" --outdir "$webrun" --formats html \
+    --projects-json "$webrun/projects.json" >/dev/null 2>&1
+webport="$(python3 -c 'import socket;s=socket.socket();s.bind(("127.0.0.1",0));print(s.getsockname()[1]);s.close()')"
+BASE="http://127.0.0.1:$webport"
+bash "$ROOT/start.sh" --output "$webroot" --port "$webport" --run 2026_web_run --no-open > "$TMP/web.log" 2>&1 &
+WEB_PID=$!
+for _ in $(seq 1 50); do
+    [[ "$(http_status "$BASE/activity")" == "200" ]] && break
+    sleep 0.1
+done
+app="$(http_get "$BASE/activity")"
+contains "web SPA shell loads" "$app" 'id="app"'
+contains "web SPA loads client script" "$app" '/static/app.js'
+for route in /reports /timeline /warnings /projects /mongo /report/2026_web_run /project/web-lab; do
+    contains "web SPA route $route" "$(http_get "$BASE$route")" 'id="app"'
+done
+contains "web serves SPA stylesheet" "$(http_get "$BASE/static/app.css")" "--accent"
+contains "web serves SPA JavaScript" "$(http_get "$BASE/static/app.js")" "connectLive"
+state="$(http_get "$BASE/api/state")"
+contains "web state includes reports" "$state" "2026_web_run"
+contains "web state includes live activity" "$state" '"activity"'
+contains "web state includes process snapshot" "$state" '"processes"'
+contains "web state includes incomplete run" "$state" "2026_pending_run"
+contains "web state includes MongoDB summary" "$state" "sample_assessment"
+mongo="$(http_get "$BASE/api/mongo")"
+contains "web MongoDB fallback source" "$mongo" '"source": "fixture"'
+contains "web MongoDB sample collection" "$mongo" "assessment_sessions"
+stream="$(http_stream "$BASE/api/events")"
+contains "web event stream content type" "$stream" "text/event-stream"
+contains "web event stream hello" "$stream" "event: hello"
+token="$(python3 -c 'import re,sys;m=re.search(rb"xamltech-token\" content=\"([^\"]+)\"",sys.stdin.buffer.read());print(m.group(1).decode() if m else "")' <<< "$app")"
+[[ -n "$token" ]] && ok "web embeds session token" || bad "web embeds session token"
+contains "web registers browser session" "$(http_post "$BASE/api/session" json "$token" id=qa-session route=/reports)" "200"
+contains "web state lists browser session" "$(http_get "$BASE/api/state")" "qa-session"
+contains "web rejects missing token" "$(http_post "$BASE/api/projects/assign" form "" run=2026_web_run project=web-lab)" "403"
+contains "web assigns report to project" "$(http_post "$BASE/api/projects/assign" json "$token" run=2026_web_run project=web-lab step=discover)" "200"
+contains "web assignment saved to project" "$(python3 -I "$ROOT/lib/projects.py" summary web-lab)" "2026_web_run"
+contains "web assignment advances step" "$(python3 -I "$ROOT/lib/projects.py" show web-lab)" "discover [done]"
+contains "web autosave updates project" "$(http_post "$BASE/api/projects/web-lab" json "$token" info=Updated-from-web step_goal_discover=Updated-goal step_status_discover=needs-action step_note_discover=Saved-by-web)" "200"
+contains "web autosave persisted info" "$(python3 -I "$ROOT/lib/projects.py" show web-lab)" "Updated-from-web"
+contains "web autosave persisted step" "$(python3 -I "$ROOT/lib/projects.py" show web-lab)" "Saved-by-web"
+contains "web serves run service page" "$(http_get "$BASE/run/2026_web_run/service.html")" "XamlTech scan service"
+contains "web blocks non-HTML run files" "$(http_status "$BASE/run/2026_web_run/report.json")" "404"
+kill "$WEB_PID" 2>/dev/null || true
+wait "$WEB_PID" 2>/dev/null || true
+WEB_PID=""
+unset XAMLTECH_NMAP_PROJECTS_DIR
 
 echo
 printf 'Passed: %d   Failed: %d   Skipped: %d\n' "$PASS" "$FAIL" "$SKIP"

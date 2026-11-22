@@ -1,0 +1,136 @@
+{
+  "database": "sample_assessment",
+  "collections": [
+    {
+      "name": "assessment_sessions",
+      "note": "Sample engagement records",
+      "documents": [
+        {
+          "_id": "sess-7c41",
+          "operator": "ops.morgan",
+          "scope": ["198.51.100.0/24", "lab.internal"],
+          "started": "2026-11-20T09:12:00Z",
+          "status": "active",
+          "tools": ["nmap", "web-workspace"]
+        },
+        {
+          "_id": "sess-2b08",
+          "operator": "ops.lee",
+          "scope": ["203.0.113.42"],
+          "started": "2026-11-18T14:45:00Z",
+          "status": "review",
+          "tools": ["nmap"]
+        },
+        {
+          "_id": "sess-91fd",
+          "operator": "ops.ramirez",
+          "scope": ["lab.internal"],
+          "started": "2026-11-11T08:05:00Z",
+          "status": "closed",
+          "tools": ["nmap", "projects"]
+        }
+      ]
+    },
+    {
+      "name": "assets",
+      "note": "Authorized lab inventory",
+      "documents": [
+        {
+          "_id": "asset-001",
+          "address": "198.51.100.12",
+          "hostname": "web-01.lab.internal",
+          "role": "web",
+          "tags": ["authorized", "dmz"],
+          "services": [
+            {"port": 22, "proto": "tcp", "service": "ssh"},
+            {"port": 443, "proto": "tcp", "service": "https"}
+          ]
+        },
+        {
+          "_id": "asset-002",
+          "address": "198.51.100.24",
+          "hostname": "db-02.lab.internal",
+          "role": "database",
+          "tags": ["authorized", "internal"],
+          "services": [
+            {"port": 27017, "proto": "tcp", "service": "mongodb"}
+          ]
+        },
+        {
+          "_id": "asset-003",
+          "address": "203.0.113.42",
+          "hostname": "edge.example.test",
+          "role": "edge",
+          "tags": ["authorized", "external"],
+          "services": [
+            {"port": 80, "proto": "tcp", "service": "http"},
+            {"port": 443, "proto": "tcp", "service": "https"}
+          ]
+        }
+      ]
+    },
+    {
+      "name": "findings",
+      "note": "NoSQL-formatted finding hints",
+      "documents": [
+        {
+          "_id": "find-1001",
+          "severity": "HIGH",
+          "rule": "XT-TLS-LEGACY",
+          "asset": "edge.example.test",
+          "title": "Legacy TLS version advertised",
+          "advice": "Disable TLS 1.0 and 1.1; verify with a follow-up scan.",
+          "refs": ["scan-2026-11-20"]
+        },
+        {
+          "_id": "find-1002",
+          "severity": "MEDIUM",
+          "rule": "XT-SSH-WEAK",
+          "asset": "web-01.lab.internal",
+          "title": "SSH host key algorithm needs review",
+          "advice": "Confirm policy and rotate host keys if required.",
+          "refs": ["scan-2026-11-18"]
+        },
+        {
+          "_id": "find-1003",
+          "severity": "LOW",
+          "rule": "XT-MONGO-EXPOSED",
+          "asset": "db-02.lab.internal",
+          "title": "MongoDB port reachable from lab segment",
+          "advice": "Verify network segmentation and authentication requirements.",
+          "refs": ["scan-2026-11-11"]
+        }
+      ]
+    },
+    {
+      "name": "scan_queue",
+      "note": "Sample queued work",
+      "documents": [
+        {
+          "_id": "queue-01",
+          "target": "198.51.100.0/24",
+          "profile": "discovery",
+          "priority": 2,
+          "state": "queued",
+          "requested_by": "ops.morgan"
+        },
+        {
+          "_id": "queue-02",
+          "target": "203.0.113.42",
+          "profile": "service",
+          "priority": 1,
+          "state": "running",
+          "requested_by": "ops.lee"
+        },
+        {
+          "_id": "queue-03",
+          "target": "lab.internal",
+          "profile": "baseline",
+          "priority": 3,
+          "state": "done",
+          "requested_by": "ops.ramirez"
+        }
+      ]
+    }
+  ]
+}

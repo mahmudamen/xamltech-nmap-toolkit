@@ -2,9 +2,10 @@
 test:
 	bash tests/run.sh
 lint:
-	@if command -v shellcheck >/dev/null 2>&1; then shellcheck -x -S warning nmap-toolkit.sh lib/*.sh install.sh tests/run.sh; else printf 'shellcheck not installed; skipping\n'; fi
+	@if command -v shellcheck >/dev/null 2>&1; then shellcheck -x -S warning nmap-toolkit.sh start.sh lib/*.sh install.sh tests/run.sh; else printf 'shellcheck not installed; skipping\n'; fi
 	bash tests/test_shellcheck.sh
-	python3 -m py_compile lib/report.py lib/projects.py
+	python3 -m py_compile lib/report.py lib/projects.py lib/web.py
+	@if command -v node >/dev/null 2>&1; then node --check webapp/app.js; else printf 'node unavailable; skipping JS syntax check\n'; fi
 install:
 	./install.sh
 user-install:

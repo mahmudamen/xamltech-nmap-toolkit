@@ -263,7 +263,7 @@ interactive_mode() {
         ui_menu "What would you like to do?" \
             "scan|Guided scan|Pick a target and any of the 30+ profiles" \
             "recon|Smart recon|Pipeline: discover -> ports -> services & scripts" \
-            "nse|NSE script packs|Web, TLS, SSH, SMB, DB, mail, Odoo, POS, IoT, audit" \
+            "nse|NSE script packs|Web, TLS, SSH, SMB, DB, mail, network, IoT, audit" \
             "advanced|Advanced options|Registry categories: targets, tuning, NSE, Nmap, safety" \
             "profiles|Browse profiles|Risk, privileges and speed for every profile" \
             "history|History & reports|Past runs, compare, open HTML reports" \

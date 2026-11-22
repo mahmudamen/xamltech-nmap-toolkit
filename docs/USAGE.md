@@ -76,4 +76,4 @@ an ASCII layout. Themes: cyber, ocean, sunset, matrix, aurora, mono.
 * Hosts shown "down": firewalls/ICMP filtering - retry with `--no-ping`.
 * Missing HTML/JSON: install `python3`.
 * A profile skips scripts: they are validated against the local `script.db`; skipped names are listed in the plan.
-* Custom NSE `odoo-info.nse` needs service detection (`-sV`) to recognise the port as HTTP - built-in profiles do this.
+* HTTP-aware NSE scripts need service detection (`-sV`) to recognise the port as HTTP - built-in profiles do this.

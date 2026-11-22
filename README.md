@@ -1,6 +1,6 @@
 <div align="center">
 
-# XamlTech Nmap Toolkit  `v2.2.0`
+# XamlTech Nmap Toolkit  `v2.5.0`
 
 **A colorful, scriptable command-line cockpit for Nmap - discovery, 30+ scan profiles, NSE intelligence,
 change detection and shareable HTML reports.**
@@ -22,13 +22,13 @@ change detection and shareable HTML reports.**
 |---|---|---|
 | Interface | prompts | gradient headline, 6 themes, arrow-key menus, live progress bar, colorized Nmap output |
 | Profiles | 7 | **33** + multi-stage `recon` / `inventory` workflows |
-| NSE | none | validated script packs (web, TLS, SSH, SMB, DB, mail, RDP, FTP, **Odoo**, **POS**, IoT, audit) + custom `odoo-info.nse` |
+| NSE | none | validated script packs (web, TLS, SSH, SMB, DB, mail, RDP, FTP, network, IoT, audit) |
 | Output | `.txt` + `.xml` | + `.gnmap`, **JSON, CSV, Markdown, self-contained HTML**, findings with severity |
 | Change detection | - | automatic diff against the previous run, `--diff`, `--history` |
 | Safety | metachar blocklist | allowlist validation, scope file, typed consent for non-private targets, blocked brute/DoS/exploit NSE, dry-run |
 | Unprivileged use | SYN scans fail | automatic, reported fallback to TCP-connect |
 | Projects | one-off scans | named projects with goals, ordered plan steps, resume and scan timeline |
-| Tests | ShellCheck only | 305 automated checks, incl. live scans of localhost and hostile-banner injection tests |
+| Tests | ShellCheck only | 358 automated checks, incl. live localhost scans, SPA API checks and hostile-banner injection tests |
 
 ![report](docs/assets/html-report.png)
 
@@ -49,7 +49,7 @@ Requirements: Linux, Bash 4.4+, Nmap, standard coreutils. Optional: `python3` (r
 ```bash
 ./nmap-toolkit.sh                                        # guided, arrow-key menu (auto-detects your subnets)
 ./nmap-toolkit.sh -t 192.168.1.0/24 -p recon --open      # discover → ports → versions/scripts, then open the report
-./nmap-toolkit.sh -t erp.example.com -p odoo             # Odoo exposure review
+./nmap-toolkit.sh -t 192.168.1.0/24 -p mynetwork        # local network exposure review
 ./nmap-toolkit.sh -t 10.0.0.0/24 -p audit --scope scope.txt --sudo
 ./nmap-toolkit.sh -t 10.0.0.5 -p tls --dry-run           # show the exact Nmap command, run nothing
 ```
@@ -81,14 +81,28 @@ Every HTML run generates `service.html`, a landing page with two views: **Scan r
 The service page opens automatically when reports finish; pass `--no-open` to keep the browser closed.
 `--open-report RUN` opens the service page when present and falls back to `report.html`.
 
+### Local web workspace (SPA)
+
+Run `./start.sh` to serve a localhost-only single-page app at `http://127.0.0.1:8765/activity`. Client-side routes
+cover **Live** (running tools, incomplete runs, browser sessions and recent changes), **Reports**, **Timeline**,
+**Warnings**, **Projects** and **MongoDB**. Live updates arrive over server-sent events with automatic polling
+fallback, so running Nmap processes, new reports and project edits appear without a reload.
+
+Assign any report to a project from the Reports or report detail view; project info, goals and step fields edit
+inline and auto-save to the same `0600` project JSON used by the CLI. The MongoDB view reads sample collections
+through local `mongosh` when `XAMLTECH_MONGO_URI` / `XAMLTECH_MONGO_DB` are set, otherwise it renders the bundled
+NoSQL fixture under `config/mongo/sample-assessment.json`. No browser data leaves the loopback interface.
+
+Use `--output DIR`, `--run NAME`, `--port PORT` or `--no-open` to change the launcher behavior. The server binds
+`127.0.0.1` only, requires a per-process CSRF token for edits and rejects non-HTML run files.
+
 ## Highlights
 
 **Smart workflows.** `recon` finds live hosts, port-scans only those, then runs version detection and scripts
 *only on ports that actually exist* - minutes instead of hours versus a blanket `-p-` scan.
 
-**Odoo & POS aware** (built for ERP estates): the bundled `scripts/odoo-info.nse` (read-only) reports the Odoo
-version, whether the **database list** is public, whether the **database manager** page is reachable and whether
-the version is out of support. The `pos` profile covers ESC/POS printers (9100), CUPS/IPP and Odoo POS ports.
+**Local network profile.** `mynetwork` checks common web/admin ports with service detection and safe NSE scripts,
+giving a fast, low-impact exposure review of a LAN segment without vendor-specific checks.
 
 **Findings engine.** Exposed Telnet/FTP/RDP/databases, SMBv1 & signing, anonymous FTP, unauthenticated
 Redis/Memcached, expired/self-signed/SHA-1 certificates, TLS 1.0/1.1, weak ciphers/SSH algorithms, risky HTTP
@@ -105,11 +119,11 @@ changed. `--sudo` re-runs through sudo (explicit opt-in, never automatic). cap_n
 **Handoffs.** `--export urls|hostports|hosts|ports|openvas` feeds ZAP/Burp, Masscan, OpenVAS/Nessus. See
 [docs/INTEGRATIONS.md](docs/INTEGRATIONS.md).
 
-## Profiles (33)
+## Profiles (32)
 
 `discovery arp sweep diagnostic list broadcast` · `quick standard deep full os udp firewall polite` ·
 `default safe-nse discovery-nse vuln-safe vuln vulners` · `web tls ssh smb dns db mail rdp ftp` ·
-`odoo pos iot` · `audit` · workflows `recon inventory` · `custom`
+`mynetwork iot` · `audit` · workflows `recon inventory` · `custom`
 
 Full table with risk, privilege need and speed: **[docs/PROFILES.md](docs/PROFILES.md)** or `--list-profiles`.
 
@@ -181,7 +195,7 @@ CI runs both on every push. See [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ## Author
 
-**Mahmoud Mohamed Amin** - Senior Odoo Developer, co-founder of XamlTech · GitHub
+**Mahmoud Mohamed Amin** - Senior software developer, co-founder of XamlTech · GitHub
 [@mahmudamen](https://github.com/mahmudamen) · https://xamltech.com
 
 MIT License - see [LICENSE](LICENSE).

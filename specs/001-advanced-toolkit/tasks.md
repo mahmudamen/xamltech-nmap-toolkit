@@ -44,7 +44,7 @@ Depends: M1. All flags must be registry entries with validator, Nmap template, p
 - [x] **T026** (FR-010, NFR-004) Add unit tests for every validator in `data-model.md` §1 (valid + invalid cases). Verify: `bash tests/run.sh`.
 - [x] **T027** (FR-024) Extend `adapt_args_for_privileges` (`lib/core.sh:370`) to handle new technique/debug flags when unprivileged; add notes to `--explain`. Verify: simulated unprivileged dry-run.
 - [x] **T028** (FR-015) Snapshot-test `--explain` output for one profile with overrides and skipped scripts. Verify: `bash tests/run.sh`.
-- [x] **T029** (FR-010) Add a dry-run snapshot test asserting the exact Nmap argv for `standard`, `odoo`, `recon`, `custom`. Verify: `bash tests/run.sh`.
+- [x] **T029** (FR-010) Add a dry-run snapshot test asserting the exact Nmap argv for `standard`, `mynetwork`, `recon`, `custom`. Verify: `bash tests/run.sh`.
 - [x] **T030** (FR-016) Regenerate completions/docs/version help after M2; confirm no drift. Verify: `make docs completions && git diff --exit-code`.
 
 ## M3 — Profiles and pipelines v2 (P1)

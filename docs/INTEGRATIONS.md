@@ -50,7 +50,7 @@ addresses in CI secrets.
   for accurate service/version detection (Masscan banners are not a substitute).
 * **Vulnerability management:** `-p audit` or `-p recon` weekly; `--diff` shows drift; feed `--export openvas` into a
   scheduled Greenbone/Nessus scan for authenticated CVE coverage.
-* **Web apps:** `-p web` or `-p odoo` → `--export urls` → import as ZAP/Burp targets.
+* **Web apps:** `-p web` or `-p mynetwork` → `--export urls` → import as ZAP/Burp targets.
 * **Troubleshooting:** when a scan result looks wrong (filtered vs closed, odd resets), capture with
   `tshark -i eth0 host <target>` while re-running the scan and inspect the handshake.
 
