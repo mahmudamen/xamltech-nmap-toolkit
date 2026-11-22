@@ -32,7 +32,7 @@ import threading
 import xml.etree.ElementTree as ET
 from collections import Counter, OrderedDict
 
-VERSION = "2.1.0"
+VERSION = "2.1.1"
 SEVERITIES = ["CRITICAL", "HIGH", "MEDIUM", "LOW", "INFO"]
 SEV_RANK = {s: i for i, s in enumerate(SEVERITIES)}
 # Odoo majors older than this are reported as likely out of support (edit to taste).

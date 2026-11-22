@@ -1,6 +1,6 @@
 <div align="center">
 
-# XamlTech Nmap Toolkit  `v2.1`
+# XamlTech Nmap Toolkit  `v2.1.1`
 
 **A colorful, scriptable command-line cockpit for Nmap - discovery, 30+ scan profiles, NSE intelligence,
 change detection and shareable HTML reports.**
@@ -27,7 +27,7 @@ change detection and shareable HTML reports.**
 | Change detection | - | automatic diff against the previous run, `--diff`, `--history` |
 | Safety | metachar blocklist | allowlist validation, scope file, typed consent for non-private targets, blocked brute/DoS/exploit NSE, dry-run |
 | Unprivileged use | SYN scans fail | automatic, reported fallback to TCP-connect |
-| Tests | ShellCheck only | 117 automated checks, incl. live scans of localhost and hostile-banner injection tests |
+| Tests | ShellCheck only | 270 automated checks, incl. live scans of localhost and hostile-banner injection tests |
 
 ![report](docs/assets/html-report.png)
 

@@ -1,14 +1,11 @@
 # shellcheck shell=bash
 # XamlTech Nmap Toolkit - interactive mode (arrow-key menus)
 
-ISO_RC=0
-
 # Run a function in an isolated subshell so die() inside it returns to the menu
-# instead of ending the whole session. Result code lands in ISO_RC.
+# instead of ending the whole session.
 run_isolated() {
     set +e
     ( set -e; "$@" )
-    ISO_RC=$?
     set -e
     return 0
 }
@@ -64,9 +61,9 @@ choose_target() {
 choose_profile() {
     local filter="${1:-}"   # optional comma separated category filter
     local -a items=()
-    local row name cat risk root speed desc
+    local row name cat risk desc
     for row in "${PROFILE_TABLE[@]}"; do
-        IFS='|' read -r name cat risk root speed desc <<< "$row"
+        IFS='|' read -r name cat risk _ _ desc <<< "$row"
         if [[ -n "$filter" && ",$filter," != *",$cat,"* ]]; then continue; fi
         [[ "$name" == broadcast ]] && continue
         items+=("$name|$name [$risk]|$desc")
@@ -114,7 +111,7 @@ registry_current_value() {
 
 advanced_options_menu() {
     local -a cats=() recs=() opts=()
-    local row cat title desc rec flag canon vkind current
+    local row cat title desc rec canon vkind current
     while IFS='|' read -r cat title desc; do
         cats+=("$cat|$title|$desc")
     done < <(options_emit_categories)

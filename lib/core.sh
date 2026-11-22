@@ -148,7 +148,7 @@ split_args() {
 
 # ---------- config (key=value, whitelist, never sourced) ----------
 
-CONFIG_KEYS=($(options_emit_config_keys))
+mapfile -t CONFIG_KEYS < <(options_emit_config_keys)
 
 load_config() {
     local file="$1" line key val k ok_key lineno=0
@@ -483,11 +483,11 @@ audit_log() {
 
 # The toolkit manages output files and refuses offensive NSE categories.
 guard_custom_args() {
-    local a next lower
+    local a next
     local -a arr=("$@")
     local i
     for (( i = 0; i < ${#arr[@]}; i++ )); do
-        a="${arr[i]}"; lower="${a,,}"
+        a="${arr[i]}"
         case "$a" in
             -oN|-oX|-oG|-oA|-oS|-oJ|--resume|--append-output|--stylesheet|--webxml|--datadir|--script-updatedb)
                 die "Option '$a' is managed by the toolkit and cannot be passed through." ;;

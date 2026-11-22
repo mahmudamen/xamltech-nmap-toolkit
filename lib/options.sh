@@ -336,7 +336,7 @@ options_in_category() {
 }
 
 options_emit_help() {
-    local cat title rec flag flags display
+    local cat rec flag flags display
     for cat in "${OPTION_CATEGORY_ORDER[@]}"; do
         printf '\n%s%s%s\n' "${C_ACCENT:-}" "${C_BOLD:-}" "${OPTION_CATEGORY_TITLE[$cat]}${C_RESET:-}"
         for rec in "${OPTION_TABLE[@]}"; do

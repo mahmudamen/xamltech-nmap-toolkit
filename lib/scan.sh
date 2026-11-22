@@ -5,11 +5,9 @@
 
 RUN_DIR=""
 START_EPOCH=0
-RUN_XMLS=()
 STAGE_FILES=()
 STAGE_SKIPPED=()
 PREV_REPORT=""
-NMAP_PID=""
 
 # py_report SUBCOMMAND ARGS...  (adds --color to terminal-facing views when enabled)
 py_report() {
@@ -367,12 +365,17 @@ stage_condition_met() {
     esac
 }
 
+stage_should_abort() {
+    local rc="$1" on_fail="$2"
+    (( rc != 0 )) && [[ "$on_fail" == abort ]]
+}
+
 stage_marker_valid() {
-    local idx="$1" name="$2" marker ts label checksum actual="" f
+    local idx="$1" name="$2" marker label checksum actual="" f
     local IFS=' '
     marker="$RUN_DIR/stage-$idx-$name.done"
     [[ -f "$marker" ]] || return 1
-    read -r ts label checksum < "$marker"
+    read -r _ label checksum < "$marker"
     checksum="$(printf '%s' "$checksum" | tr -s ' ' | sed 's/ $//')"
     for f in "$RUN_DIR/stage-$idx-$name.xml" "$RUN_DIR/stage-$idx-$name.gnmap" "$RUN_DIR/nmap.xml"; do
         [[ -f "$f" ]] || continue
@@ -478,7 +481,7 @@ run_workflow() {
         [[ "$name" == services ]] && base=nmap
         rc=0
         run_nmap "$base" "${tgt[@]}" || rc=$?
-        if (( rc != 0 && "$on_fail" == abort )); then
+        if stage_should_abort "$rc" "$on_fail"; then
             audit_log "$rc" "$cmd_display" "${PLAN_HASH:-}"
             die "Stage $name failed with status $rc"
         fi

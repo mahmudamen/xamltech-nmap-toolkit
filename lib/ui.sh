@@ -82,30 +82,28 @@ fg_rgb() {
 
 ui_define_colors() {
     if [[ $UI_COLOR -eq 1 ]]; then
-        C_RESET=$'\033[0m'; C_BOLD=$'\033[1m'; C_DIM=$'\033[2m'; C_ITALIC=$'\033[3m'
-        C_UL=$'\033[4m'
+        C_RESET=$'\033[0m'; C_BOLD=$'\033[1m'; C_DIM=$'\033[2m'
         C_RED=$'\033[38;5;203m';    C_GREEN=$'\033[38;5;84m'
-        C_YELLOW=$'\033[38;5;221m'; C_BLUE=$'\033[38;5;75m'
-        C_MAGENTA=$'\033[38;5;177m'; C_CYAN=$'\033[38;5;80m'
+        C_YELLOW=$'\033[38;5;221m'; C_CYAN=$'\033[38;5;80m'
         C_ORANGE=$'\033[38;5;214m'; C_GRAY=$'\033[38;5;245m'
         C_WHITE=$'\033[38;5;255m'
         C_BG_RED=$'\033[48;5;160m\033[38;5;231m'
         C_ACCENT="$(fg_rgb "$TH_A")"
     else
-        C_RESET=''; C_BOLD=''; C_DIM=''; C_ITALIC=''; C_UL=''
-        C_RED=''; C_GREEN=''; C_YELLOW=''; C_BLUE=''; C_MAGENTA=''; C_CYAN=''
+        C_RESET=''; C_BOLD=''; C_DIM=''
+        C_RED=''; C_GREEN=''; C_YELLOW=''; C_CYAN=''
         C_ORANGE=''; C_GRAY=''; C_WHITE=''; C_BG_RED=''; C_ACCENT=''
     fi
 }
 
 ui_define_symbols() {
     if [[ $UI_UTF8 -eq 1 ]]; then
-        S_OK="✔"; S_ERR="✖"; S_WARN="▲"; S_INFO="●"; S_ARROW="➜"; S_DOT="·"
+        S_OK="✔"; S_ERR="✖"; S_WARN="▲"; S_INFO="●"; S_DOT="·"
         S_BAR_ON="█"; S_BAR_OFF="░"; S_H="─"; S_V="│"
         S_TL="╭"; S_TR="╮"; S_BL="╰"; S_BR="╯"; S_PTR="❯"; S_STEP="◆"
         SPIN_FRAMES=(⠋ ⠙ ⠹ ⠸ ⠼ ⠴ ⠦ ⠧ ⠇ ⠏)
     else
-        S_OK="+"; S_ERR="x"; S_WARN="!"; S_INFO="*"; S_ARROW=">"; S_DOT="-"
+        S_OK="+"; S_ERR="x"; S_WARN="!"; S_INFO="*"; S_DOT="-"
         S_BAR_ON="#"; S_BAR_OFF="."; S_H="-"; S_V="|"
         S_TL="+"; S_TR="+"; S_BL="+"; S_BR="+"; S_PTR=">"; S_STEP="*"
         SPIN_FRAMES=('|' '/' '-' '\')
@@ -210,7 +208,7 @@ BANNER_ART=(
 )
 
 banner() {
-    local i row
+    local i
     printf '\n'
     if [[ $UI_UTF8 -eq 1 && $UI_COLS -ge 72 ]]; then
         for (( i = 0; i < ${#BANNER_ART[@]}; i++ )); do

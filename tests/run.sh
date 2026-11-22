@@ -214,6 +214,9 @@ printf 'stage|recon|1|bad|discovery|original||||0|nope\n' > "$TMP/bad-stages.txt
 check_not "malformed stage record rejected" bash -c "XAMLTECH_NMAP_STAGES_FILE='$TMP/bad-stages.txt' source '$ROOT/lib/options.sh'; XAMLTECH_NMAP_STAGES_FILE='$TMP/bad-stages.txt' source '$ROOT/lib/ui.sh'; XAMLTECH_NMAP_STAGES_FILE='$TMP/bad-stages.txt' source '$ROOT/lib/core.sh'; XAMLTECH_NMAP_STAGES_FILE='$TMP/bad-stages.txt' source '$ROOT/lib/nse.sh'; XAMLTECH_NMAP_STAGES_FILE='$TMP/bad-stages.txt' source '$ROOT/lib/profiles.sh'"
 check "stage condition port match" bash -c "source '$ROOT/lib/options.sh'; source '$ROOT/lib/ui.sh'; source '$ROOT/lib/core.sh'; source '$ROOT/lib/nse.sh'; source '$ROOT/lib/profiles.sh'; source '$ROOT/lib/scan.sh'; stage_condition_met 'port in 22,80' '22' 1"
 check_not "stage condition port miss" bash -c "source '$ROOT/lib/options.sh'; source '$ROOT/lib/ui.sh'; source '$ROOT/lib/core.sh'; source '$ROOT/lib/nse.sh'; source '$ROOT/lib/profiles.sh'; source '$ROOT/lib/scan.sh'; stage_condition_met 'port in 22,80' '443' 1"
+check "stage abort on failure" bash -c "source '$ROOT/lib/options.sh'; source '$ROOT/lib/ui.sh'; source '$ROOT/lib/core.sh'; source '$ROOT/lib/nse.sh'; source '$ROOT/lib/profiles.sh'; source '$ROOT/lib/scan.sh'; stage_should_abort 1 abort"
+check_not "stage continue on failure" bash -c "source '$ROOT/lib/options.sh'; source '$ROOT/lib/ui.sh'; source '$ROOT/lib/core.sh'; source '$ROOT/lib/nse.sh'; source '$ROOT/lib/profiles.sh'; source '$ROOT/lib/scan.sh'; stage_should_abort 1 continue"
+check_not "stage success never aborts" bash -c "source '$ROOT/lib/options.sh'; source '$ROOT/lib/ui.sh'; source '$ROOT/lib/core.sh'; source '$ROOT/lib/nse.sh'; source '$ROOT/lib/profiles.sh'; source '$ROOT/lib/scan.sh'; stage_should_abort 0 abort"
 python3 - "$TMP/baseline.json" <<'PY'
 import json, sys
 json.dump({"schema_version": 2, "hosts": [{"address": "127.0.0.1", "status": "up",

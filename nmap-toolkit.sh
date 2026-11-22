@@ -24,7 +24,7 @@ TOOLKIT_HOME="${XAMLTECH_NMAP_HOME:-$(dirname "$SCRIPT_PATH")}"
 LIB_DIR="$TOOLKIT_HOME/lib"
 SCRIPTS_DIR="$TOOLKIT_HOME/scripts"
 readonly SCRIPT_PATH TOOLKIT_HOME LIB_DIR SCRIPTS_DIR
-SCRIPT_VERSION="$(python3 -I "$LIB_DIR/report.py" version 2>/dev/null || printf '2.1.0')"
+SCRIPT_VERSION="$(python3 -I "$LIB_DIR/report.py" version 2>/dev/null || printf '2.1.1')"
 readonly SCRIPT_VERSION
 ORIGINAL_ARGS=("$@")
 

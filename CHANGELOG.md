@@ -1,5 +1,16 @@
 # Changelog
 
+## [2.1.1] - 2026-11-22
+
+### Added
+- ShellCheck configuration (`.shellcheckrc`) for cross-file globals and comma-separated Nmap port arguments.
+- Characterization tests for workflow stage failure handling (`abort` vs `continue`, successful stages never abort).
+
+### Changed
+- Shell hygiene: replaced unsafe word-splitting with `mapfile`, removed unused locals/globals, and extracted
+  `stage_should_abort()` so stage failure policy is testable in isolation.
+- No CLI flags, exit codes, output layout or report formats changed; `--version` now reports `2.1.1`.
+
 ## [2.1.0] - 2026-11-19
 
 ### Added
